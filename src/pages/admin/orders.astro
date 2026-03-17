@@ -182,20 +182,27 @@ import { supabase } from '../../lib/supabase';
 </AdminLayout>
 
 <script>
-  // Use the Supabase client from AdminLayout
+  // Use the Supabase client from Layout/AdminLayout
   let supabase;
   
-  // Wait for Supabase to load
+  // Wait for Supabase to load (supports both global client and library)
   function waitForSupabase() {
     return new Promise((resolve) => {
-      if (window.supabase && window.supabase.createClient) {
-        // Use the same configuration as AdminLayout
+      // Case 1: window.supabase is already an initialized client (has auth API)
+      if (window.supabase && window.supabase.auth && typeof window.supabase.auth.getUser === 'function') {
+        supabase = window.supabase;
+        resolve(supabase);
+      }
+      // Case 2: window.supabase is the Supabase library (has createClient)
+      else if (window.supabase && typeof window.supabase.createClient === 'function') {
         supabase = window.supabase.createClient(
           'https://lmrrdcaavwwletcjcpqv.supabase.co',
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ'
         );
         resolve(supabase);
-      } else {
+      }
+      // Case 3: Supabase not yet loaded – retry shortly
+      else {
         setTimeout(() => waitForSupabase().then(resolve), 100);
       }
     });

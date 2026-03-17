@@ -669,31 +669,104 @@ import AuthGuard from '../components/AuthGuard.astro';
       }
     }
 
-    // Show loading state immediately
-    const updateBtn = document.getElementById('update-btn') as HTMLButtonElement;
-    const originalButtonText = updateBtn.innerHTML;
-    updateBtn.disabled = true;
-    updateBtn.innerHTML = `
-      <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-      <span>Updating...</span>
-    `;
+    console.log('🔄 Profile form submit triggered');
+
+    let updateBtn = document.getElementById('update-btn') as HTMLButtonElement | null;
+    const originalButtonText = updateBtn ? updateBtn.innerHTML : 'Update Profile';
 
     try {
-      // Get current Supabase auth user (source of truth for id/email)
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user || !user.id) {
-        console.error('Supabase auth error while updating profile:', authError);
-        showError('User not authenticated. Please log in again.');
-        updateBtn.disabled = false;
-        updateBtn.innerHTML = originalButtonText;
-        return;
+      // Show loading state immediately (inside try so any DOM issues are caught)
+      if (updateBtn) {
+        updateBtn.disabled = true;
+        updateBtn.innerHTML = `
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Updating...</span>
+        `;
       }
 
-      const authManager = window.globalAuthManager || window.simpleAuthManager;
-      const currentUser = authManager?.getCurrentUser() || { id: user.id, email: user.email };
+      console.log('🔎 Resolving current user for profile update...');
+
+      // Small helper to enforce a max wait time for Supabase calls
+      const withTimeout = (promise: Promise<any>, label: string, ms = 15000) => {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+          )
+        ]);
+      };
+
+      // Resolve current user from multiple sources (auth manager, storage, fallback to Supabase)
+      const authManager = (window as any).globalAuthManager || (window as any).simpleAuthManager;
+      let currentUser: any = null;
+
+      try {
+        if (authManager && typeof authManager.getCurrentUser === 'function') {
+          currentUser = authManager.getCurrentUser();
+          console.log('✅ Using user from auth manager:', currentUser?.email);
+        }
+      } catch (e) {
+        console.warn('⚠️ Error reading user from auth manager:', e);
+      }
+
+      // Fallback 1: sessionStorage
+      if (!currentUser) {
+        try {
+          const sessionRaw = sessionStorage.getItem('simple-auth-session');
+          if (sessionRaw) {
+            const sessionParsed = JSON.parse(sessionRaw);
+            if (sessionParsed?.user?.id && sessionParsed.user.email) {
+              currentUser = sessionParsed.user;
+              console.log('✅ Using user from sessionStorage:', currentUser.email);
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Error reading user from sessionStorage:', e);
+        }
+      }
+
+      // Fallback 2: localStorage
+      if (!currentUser) {
+        try {
+          const storedUserRaw = localStorage.getItem('simple-auth-user');
+          if (storedUserRaw) {
+            const storedUser = JSON.parse(storedUserRaw);
+            if (storedUser?.id && storedUser.email) {
+              currentUser = storedUser;
+              console.log('✅ Using user from localStorage:', currentUser.email);
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Error reading user from localStorage:', e);
+        }
+      }
+
+      // Fallback 3: direct Supabase call ONLY if needed
+      if (!currentUser) {
+        console.log('ℹ️ No cached user found, calling supabase.auth.getUser as fallback...');
+        const { data: { user }, error: authError } = await withTimeout(
+          supabase.auth.getUser(),
+          'supabase.auth.getUser'
+        ) as any;
+
+        if (authError || !user || !user.id) {
+          console.error('Supabase auth error while updating profile:', authError);
+          showError('User not authenticated. Please log in again.');
+          return;
+        }
+
+        currentUser = { id: user.id, email: user.email };
+        console.log('✅ Using user from Supabase auth:', currentUser.email);
+      }
+
+      if (!currentUser?.id) {
+        console.error('❌ Could not resolve authenticated user for profile update');
+        showError('User not authenticated. Please log in again.');
+        return;
+      }
 
       // Format phone number with country code
       const formattedPhone = phone && phone.trim() ? `${countryCode}${phone.replace(/\D/g, '')}` : null;
@@ -707,14 +780,37 @@ import AuthGuard from '../components/AuthGuard.astro';
       };
 
       // 1) Update Supabase profiles table (single awaited call – source of truth)
-      const { error: dbError } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', user.id);
+      console.log('💾 Sending profile update to Supabase profiles table...', updateData);
+      const { error: dbError } = await withTimeout(
+        supabase
+          .from('profiles')
+          .update(updateData)
+          .eq('id', currentUser.id),
+        'profiles update'
+      ) as any;
 
       if (dbError) {
         console.error('Supabase update error:', dbError);
         throw new Error(dbError.message || 'Database update failed');
+      }
+
+      console.log('✅ Profiles table updated, updating auth metadata...');
+
+      // 1b) Also update Supabase auth user metadata so all sessions/pages see fresh data
+      try {
+        await withTimeout(
+          supabase.auth.updateUser({
+            data: {
+              full_name: fullName.trim(),
+              phone: formattedPhone || null,
+              company_name: companyName.trim() || null,
+            }
+          }),
+          'supabase.auth.updateUser'
+        );
+        console.log('✅ Supabase auth user metadata updated');
+      } catch (authMetaError) {
+        console.warn('⚠️ Failed to update auth user metadata (non-critical):', authMetaError);
       }
 
       // 2) Update session/local storage for instant feedback AFTER DB success
@@ -770,18 +866,20 @@ import AuthGuard from '../components/AuthGuard.astro';
         errorMessage.classList.add('hidden');
       }
 
-      // Reset button state
-      updateBtn.disabled = false;
-      updateBtn.innerHTML = originalButtonText;
-
       // Dispatch auth state change event so other components refresh user info
       window.dispatchEvent(new CustomEvent('auth-state-changed'));
-      
+      console.log('✅ Profile update flow completed');
+
     } catch (error: any) {
       console.error('Profile update error:', error);
       showError(error.message || 'Failed to update profile. Please try again.');
-      updateBtn.disabled = false;
-      updateBtn.innerHTML = originalButtonText;
+    } finally {
+      // Always reset button state, no matter what happened above
+      updateBtn = document.getElementById('update-btn') as HTMLButtonElement | null;
+      if (updateBtn) {
+        updateBtn.disabled = false;
+        updateBtn.innerHTML = originalButtonText;
+      }
     }
   });
 

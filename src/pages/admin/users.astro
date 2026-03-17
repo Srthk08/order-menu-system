@@ -360,13 +360,21 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   let itemsPerPage = 10;
   let totalPages = 1;
 
-  // Wait for Supabase to load
+  // Wait for Supabase to load (supports both global client and library)
   function waitForSupabase() {
     return new Promise((resolve) => {
-      if (window.supabase) {
+      // Case 1: window.supabase is already an initialized client (has auth API)
+      if (window.supabase && window.supabase.auth && typeof window.supabase.auth.getUser === 'function') {
+        supabase = window.supabase;
+        resolve(supabase);
+      }
+      // Case 2: window.supabase is the Supabase library (has createClient)
+      else if (window.supabase && typeof window.supabase.createClient === 'function') {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         resolve(supabase);
-      } else {
+      }
+      // Case 3: Supabase not yet loaded – retry shortly
+      else {
         setTimeout(() => waitForSupabase().then(resolve), 100);
       }
     });
@@ -393,17 +401,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         await waitForSupabase();
       }
       
-      console.log('✅ Supabase client ready:', !!supabase);
-      
-      // Get current user first to ensure we're authenticated
-      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !currentUser) {
-        console.error('❌ Not authenticated:', userError);
-        return;
-      }
-      
-      console.log('✅ Authenticated as:', currentUser.email);
+      console.log('✅ Supabase client ready for loading users:', !!supabase);
       
       // First, let's check if there are any users at all
       const { count, error: countError } = await supabase

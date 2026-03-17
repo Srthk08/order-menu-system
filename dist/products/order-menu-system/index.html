@@ -81,7 +81,15 @@
         console.error('❌ Alpine.js failed to load from all CDN sources');
       };
       document.head.appendChild(fallback);
-    "></script><!-- EmailJS for email notifications --><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script><!-- Supabase Client --><script type="module">const a="https://lmrrdcaavwwletcjcpqv.supabase.co",r="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ";let e=0;const i=50;function s(){if(typeof supabase<"u")try{window.supabase=supabase.createClient(a,r,{auth:{autoRefreshToken:!0,persistSession:!0,detectSessionInUrl:!0,flowType:"pkce"}}),console.log("✅ Supabase client initialized globally"),e=0}catch(t){console.error("❌ Error creating Supabase client:",t),e<i?(e++,setTimeout(s,100)):console.error("❌ Failed to initialize Supabase after maximum retries")}else e<i?(e++,e%10===0&&console.log("⏳ Supabase library not loaded yet, retrying... ("+e+"/"+i+")"),setTimeout(s,100)):console.error("❌ Supabase library failed to load after maximum retries. Please check your internet connection.")}s();</script><script type="module" src="/_astro/Layout.astro_astro_type_script_index_4_lang.CqubJ7kq.js"></script><!-- Custom Tailwind Config --><script type="module">function e(){document.querySelectorAll(".text-white:not(header .text-white):not(section .text-white)").forEach(t=>{t.style.setProperty("--tw-text-opacity","1","important"),t.style.setProperty("color","rgb(21 17 17)","important")}),document.querySelectorAll("header .text-white").forEach(t=>{t.style.setProperty("--tw-text-opacity","1","important"),t.style.setProperty("color","white","important")}),document.querySelectorAll("section .text-white").forEach(t=>{t.style.setProperty("--tw-text-opacity","1","important"),t.style.setProperty("color","white","important")})}document.addEventListener("DOMContentLoaded",e);const o=new MutationObserver(e);o.observe(document.body,{childList:!0,subtree:!0});</script><!-- Custom CSS --><link rel="stylesheet" href="/_astro/about.BkWB6z99.css">
+    "></script><!-- EmailJS for email notifications --><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script><!-- Supabase Client --><script src="https://unpkg.com/@supabase/supabase-js@2" onerror="
+      console.warn('⚠️ Supabase failed to load from unpkg, trying jsDelivr...');
+      const fallback = document.createElement('script');
+      fallback.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+      fallback.onerror = function() {
+        console.error('❌ Supabase failed to load from all CDN sources');
+      };
+      document.head.appendChild(fallback);
+    "></script><script type="module">const a="https://lmrrdcaavwwletcjcpqv.supabase.co",r="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ";let e=0;const i=50;function s(){if(typeof supabase<"u")try{window.supabase=supabase.createClient(a,r,{auth:{autoRefreshToken:!0,persistSession:!0,detectSessionInUrl:!0,flowType:"pkce"}}),console.log("✅ Supabase client initialized globally"),e=0}catch(t){console.error("❌ Error creating Supabase client:",t),e<i?(e++,setTimeout(s,100)):console.error("❌ Failed to initialize Supabase after maximum retries")}else e<i?(e++,e%10===0&&console.log("⏳ Supabase library not loaded yet, retrying... ("+e+"/"+i+")"),setTimeout(s,100)):console.error("❌ Supabase library failed to load after maximum retries. Please check your internet connection.")}s();</script><!-- Custom Tailwind Config --><script type="module">function e(){document.querySelectorAll(".text-white:not(header .text-white):not(section .text-white)").forEach(t=>{t.style.setProperty("--tw-text-opacity","1","important"),t.style.setProperty("color","rgb(21 17 17)","important")}),document.querySelectorAll("header .text-white").forEach(t=>{t.style.setProperty("--tw-text-opacity","1","important"),t.style.setProperty("color","white","important")}),document.querySelectorAll("section .text-white").forEach(t=>{t.style.setProperty("--tw-text-opacity","1","important"),t.style.setProperty("color","white","important")})}document.addEventListener("DOMContentLoaded",e);const o=new MutationObserver(e);o.observe(document.body,{childList:!0,subtree:!0});</script><!-- Custom CSS --><link rel="stylesheet" href="/_astro/about.BVbhU4_R.css">
 <link rel="stylesheet" href="/_astro/billing.BJia1hUk.css">
 <style>.animate-fade-in[data-astro-cid-o422f4lv]{animation:fadeIn .6s ease-out forwards;opacity:0}@keyframes fadeIn{0%{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}.rotate-180[data-astro-cid-o422f4lv]{transform:rotate(180deg)}a[data-astro-cid-o422f4lv].contact-us-btn{color:#fff!important}a[data-astro-cid-o422f4lv].contact-us-btn:hover{color:#000!important;background-color:#fff!important}a[data-astro-cid-o422f4lv].contact-us-btn:focus{color:#000!important;background-color:#fff!important}.contact-us-btn[data-astro-cid-o422f4lv]:hover span[data-astro-cid-o422f4lv],.contact-us-btn[data-astro-cid-o422f4lv]:hover{color:#000!important}.restaurant-menu-system-page[data-astro-cid-o422f4lv]{color:#1e40af!important}.android-tv-app-page[data-astro-cid-o422f4lv]{color:#7c3aed!important}.streaming-mobile-app-page[data-astro-cid-o422f4lv]{color:#be185d!important}.restaurant-website-page[data-astro-cid-o422f4lv]{color:#065f46!important}.order-menu-system-page[data-astro-cid-o422f4lv]{color:#92400e!important}.restaurant-menu-system-page[data-astro-cid-o422f4lv] h1[data-astro-cid-o422f4lv],.restaurant-menu-system-page[data-astro-cid-o422f4lv] h2[data-astro-cid-o422f4lv],.restaurant-menu-system-page[data-astro-cid-o422f4lv] h3[data-astro-cid-o422f4lv],.restaurant-menu-system-page[data-astro-cid-o422f4lv] p[data-astro-cid-o422f4lv],.restaurant-menu-system-page[data-astro-cid-o422f4lv] span[data-astro-cid-o422f4lv],.android-tv-app-page[data-astro-cid-o422f4lv] h1[data-astro-cid-o422f4lv],.android-tv-app-page[data-astro-cid-o422f4lv] h2[data-astro-cid-o422f4lv],.android-tv-app-page[data-astro-cid-o422f4lv] h3[data-astro-cid-o422f4lv],.android-tv-app-page[data-astro-cid-o422f4lv] p[data-astro-cid-o422f4lv],.android-tv-app-page[data-astro-cid-o422f4lv] span[data-astro-cid-o422f4lv],.streaming-mobile-app-page[data-astro-cid-o422f4lv] h1[data-astro-cid-o422f4lv],.streaming-mobile-app-page[data-astro-cid-o422f4lv] h2[data-astro-cid-o422f4lv],.streaming-mobile-app-page[data-astro-cid-o422f4lv] h3[data-astro-cid-o422f4lv],.streaming-mobile-app-page[data-astro-cid-o422f4lv] p[data-astro-cid-o422f4lv],.streaming-mobile-app-page[data-astro-cid-o422f4lv] span[data-astro-cid-o422f4lv],.restaurant-website-page[data-astro-cid-o422f4lv] h1[data-astro-cid-o422f4lv],.restaurant-website-page[data-astro-cid-o422f4lv] h2[data-astro-cid-o422f4lv],.restaurant-website-page[data-astro-cid-o422f4lv] h3[data-astro-cid-o422f4lv],.restaurant-website-page[data-astro-cid-o422f4lv] p[data-astro-cid-o422f4lv],.restaurant-website-page[data-astro-cid-o422f4lv] span[data-astro-cid-o422f4lv],.order-menu-system-page[data-astro-cid-o422f4lv] h1[data-astro-cid-o422f4lv],.order-menu-system-page[data-astro-cid-o422f4lv] h2[data-astro-cid-o422f4lv],.order-menu-system-page[data-astro-cid-o422f4lv] h3[data-astro-cid-o422f4lv],.order-menu-system-page[data-astro-cid-o422f4lv] p[data-astro-cid-o422f4lv],.order-menu-system-page[data-astro-cid-o422f4lv] span[data-astro-cid-o422f4lv]{color:inherit!important}
 </style></head> <body class="h-full bg-blue-600 font-sans text-white antialiased" data-astro-cid-sckkx6r4> <!-- Header --> <header class="bg-blue-600 shadow-xl border-b border-blue-700" data-astro-cid-3ef6ksr2> <div class="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12" data-astro-cid-3ef6ksr2> <div class="flex justify-between items-center h-24" data-astro-cid-3ef6ksr2> <!-- Logo --> <div class="flex items-center" data-astro-cid-3ef6ksr2> <a href="/" class="flex items-center space-x-4" data-astro-cid-3ef6ksr2> <div class="w-14 h-14 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center backdrop-blur-sm" data-astro-cid-3ef6ksr2> <span class="text-white font-bold text-xl" data-astro-cid-3ef6ksr2>24</span> </div> <div data-astro-cid-3ef6ksr2> <span class="text-3xl font-bold text-white" data-astro-cid-3ef6ksr2>DevExpress</span> <p class="text-white text-opacity-90 -mt-1 font-medium" data-astro-cid-3ef6ksr2>24 Hour Delivery</p> </div> </a> </div> <!-- Desktop Navigation - Hidden on mobile --> <nav id="main-navigation" class="hidden lg:flex items-center space-x-10" data-astro-cid-3ef6ksr2> <a href="/" class="text-white text-opacity-90 hover:text-white px-6 py-3 text-lg font-medium transition-all duration-300 rounded-xl hover:bg-white hover:bg-opacity-20 hover:scale-105" data-astro-cid-3ef6ksr2>
@@ -122,7 +130,7 @@ Contact
 Sign In
 </a> <!-- Sign Up - Simple text button (no background) --> <a href="/signup" class="block px-6 py-4 text-2xl font-light text-white hover:text-white transition-all duration-300" data-astro-cid-3ef6ksr2>
 Sign Up
-</a> </div> <!-- User Menu - Only visible after login --> <div id="mobile-user-menu" class="hidden space-y-1" data-astro-cid-3ef6ksr2> <!-- User Info Section --> <div class="px-6 py-4 border-t border-white border-opacity-20 mt-4" data-astro-cid-3ef6ksr2> <p class="text-lg text-white text-opacity-70" data-astro-cid-3ef6ksr2>Signed in as</p> <p class="text-2xl font-light text-white break-all overflow-hidden" id="mobile-user-email" title="user@example.com" data-astro-cid-3ef6ksr2>sarthak21042@gmail.com</p> </div> <!-- User Menu Items --> <a href="/dashboard" id="mobile-dashboard-link" class="flex items-center px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" data-astro-cid-3ef6ksr2></path> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Dashboard</span> </a> <button id="mobile-profile-link" class="flex items-center w-full px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300 text-left" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Profile</span> </button> <a href="/orders" class="flex items-center px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>My Orders</span> </a> <a href="/support" class="flex items-center px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Support</span> </a> <!-- Menu Operator Link - Only visible for menu operator users --> <div id="mobile-menu-operator-link" class="hidden" data-astro-cid-3ef6ksr2> <a href="/menu-operator" class="flex items-center w-full px-4 py-4 text-lg font-medium text-white text-opacity-90 hover:text-white hover:bg-white hover:bg-opacity-20 rounded-xl transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Menu Operator Dashboard</span> </a> </div> <!-- Admin Panel Link - Only visible for admin users --> <div id="mobile-admin-panel-link" class="hidden" data-astro-cid-3ef6ksr2> <a href="/admin/data" class="flex items-center w-full px-4 py-4 text-lg font-medium text-white text-opacity-90 hover:text-white hover:bg-white hover:bg-opacity-20 rounded-xl transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Admin Panel</span> </a> </div> <!-- Sign Out Button --> <button onclick="signOut()" class="w-full flex items-center px-6 py-4 text-2xl font-light text-red-400 hover:text-red-300 hover:bg-red-500 hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1 text-left" data-astro-cid-3ef6ksr2>Sign Out</span> </button> </div> </div> </div> </div> </div> </header>  <script type="module" src="/_astro/Header.astro_astro_type_script_index_0_lang.BvC_PryK.js"></script> <!-- Main Content --> <main class="min-h-screen page-transition" data-astro-cid-sckkx6r4> <script>
+</a> </div> <!-- User Menu - Only visible after login --> <div id="mobile-user-menu" class="hidden space-y-1" data-astro-cid-3ef6ksr2> <!-- User Info Section --> <div class="px-6 py-4 border-t border-white border-opacity-20 mt-4" data-astro-cid-3ef6ksr2> <p class="text-lg text-white text-opacity-70" data-astro-cid-3ef6ksr2>Signed in as</p> <p class="text-2xl font-light text-white break-all overflow-hidden" id="mobile-user-email" title="user@example.com" data-astro-cid-3ef6ksr2>sarthak21042@gmail.com</p> </div> <!-- User Menu Items --> <a href="/dashboard" id="mobile-dashboard-link" class="flex items-center px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" data-astro-cid-3ef6ksr2></path> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Dashboard</span> </a> <button id="mobile-profile-link" class="flex items-center w-full px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300 text-left" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Profile</span> </button> <a href="/orders" class="flex items-center px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>My Orders</span> </a> <a href="/support" class="flex items-center px-6 py-4 text-2xl font-light text-white hover:text-white hover:bg-white hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Support</span> </a> <!-- Menu Operator Link - Only visible for menu operator users --> <div id="mobile-menu-operator-link" class="hidden" data-astro-cid-3ef6ksr2> <a href="/menu-operator" class="flex items-center w-full px-4 py-4 text-lg font-medium text-white text-opacity-90 hover:text-white hover:bg-white hover:bg-opacity-20 rounded-xl transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Menu Operator Dashboard</span> </a> </div> <!-- Admin Panel Link - Only visible for admin users --> <div id="mobile-admin-panel-link" class="hidden" data-astro-cid-3ef6ksr2> <a href="/admin/data" class="flex items-center w-full px-4 py-4 text-lg font-medium text-white text-opacity-90 hover:text-white hover:bg-white hover:bg-opacity-20 rounded-xl transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6 mr-4 text-white text-opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1" data-astro-cid-3ef6ksr2>Admin Panel</span> </a> </div> <!-- Sign Out Button --> <button onclick="signOut()" class="w-full flex items-center px-6 py-4 text-2xl font-light text-red-400 hover:text-red-300 hover:bg-red-500 hover:bg-opacity-20 transition-all duration-300" data-astro-cid-3ef6ksr2> <svg class="w-5 h-5 mr-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" data-astro-cid-3ef6ksr2></path> </svg> <span class="flex-1 text-left" data-astro-cid-3ef6ksr2>Sign Out</span> </button> </div> </div> </div> </div> </div> </header>  <script type="module" src="/_astro/Header.astro_astro_type_script_index_0_lang.NzRciFda.js"></script> <!-- Main Content --> <main class="min-h-screen page-transition" data-astro-cid-sckkx6r4> <script>
       (function() {
         // Hide content immediately - ALL products require authentication
         const currentPath = window.location.pathname;
@@ -184,12 +192,61 @@ Sign Up
         // Check auth status with retries
         const checkAuth = () => {
           const authManager = window.globalAuthManager || window.simpleAuthManager;
+
+          // Read session/user from BOTH sessionStorage and localStorage (deployment-safe)
           const sessionData = sessionStorage.getItem('simple-auth-session');
-          const hasValidSession = sessionData && sessionData !== 'null' && sessionData !== '{}';
+          const localSessionData = !sessionData || sessionData === 'null' || sessionData === '{}' 
+            ? localStorage.getItem('simple-auth-session') 
+            : null;
+          const storedUser = localStorage.getItem('simple-auth-user');
+
+          let hasValidSession = false;
+          let effectiveSession = null;
+
+          // Prefer sessionStorage
+          if (sessionData && sessionData !== 'null' && sessionData !== '{}') {
+            try {
+              const parsed = JSON.parse(sessionData);
+              if (parsed && parsed.user && parsed.user.email) {
+                hasValidSession = true;
+                effectiveSession = parsed;
+              }
+            } catch (e) {
+              console.log('SessionStorage parse error in product auth, trying localStorage...', e);
+            }
+          }
+
+          // Fallback to localStorage session
+          if (!hasValidSession && localSessionData && localSessionData !== 'null' && localSessionData !== '{}') {
+            try {
+              const parsed = JSON.parse(localSessionData);
+              if (parsed && parsed.user && parsed.user.email) {
+                hasValidSession = true;
+                effectiveSession = parsed;
+                // Sync back to sessionStorage for future checks
+                sessionStorage.setItem('simple-auth-session', localSessionData);
+              }
+            } catch (e) {
+              console.log('LocalStorage session parse error in product auth, trying user data...', e);
+            }
+          }
+
+          // Final fallback: plain user data in localStorage
+          if (!hasValidSession && storedUser && storedUser !== 'null' && storedUser !== '{}') {
+            try {
+              const user = JSON.parse(storedUser);
+              if (user && user.email) {
+                hasValidSession = true;
+                effectiveSession = { user, access_token: 'simple-token-' + Date.now(), timestamp: Date.now() };
+                sessionStorage.setItem('simple-auth-session', JSON.stringify(effectiveSession));
+              }
+            } catch (e) {
+              console.log('LocalStorage user parse error in product auth:', e);
+            }
+          }
           
-          // Quick check: if we have session data, user might be logged in
-          // If no session data at all, redirect immediately without waiting
-          if (!sessionData || sessionData === 'null' || sessionData === '{}') {
+          // Quick check: if we have NO valid session anywhere, redirect immediately
+          if (!hasValidSession) {
             // No session data - redirect immediately with smooth transition
             if (document.body) {
               document.body.style.transition = 'opacity 0.3s ease-out';
@@ -207,27 +264,20 @@ Sign Up
           
           // SPECIAL HANDLING FOR ORDER MENU SYSTEM: If we have session data, trust it
           // This prevents redirect loops in production where auth manager might load slower
-          if (isOrderMenuSystem && hasValidSession) {
+          if (isOrderMenuSystem && hasValidSession && effectiveSession) {
             // Try to parse session to verify it's valid
-            try {
-              const session = JSON.parse(sessionData);
-              if (session && session.user && session.user.email) {
-                // Valid session data exists - allow access for OMS even if auth manager not ready
-                console.log('✅ Order Menu System - valid session found, allowing access');
-                if (document.body) {
-                  document.body.style.transition = 'opacity 0.3s ease-in';
-                  document.body.style.opacity = '1';
-                }
-                if (document.documentElement) {
-                  document.documentElement.style.transition = 'opacity 0.3s ease-in';
-                  document.documentElement.style.opacity = '1';
-                }
-                return;
-              }
-            } catch (e) {
-              // Invalid session data, continue with normal check
-              console.log('Session data parse error, continuing with auth manager check');
+            const session = effectiveSession;
+            // Valid session data exists - allow access for OMS even if auth manager not ready
+            console.log('✅ Order Menu System - valid session found, allowing access');
+            if (document.body) {
+              document.body.style.transition = 'opacity 0.3s ease-in';
+              document.body.style.opacity = '1';
             }
+            if (document.documentElement) {
+              document.documentElement.style.transition = 'opacity 0.3s ease-in';
+              document.documentElement.style.opacity = '1';
+            }
+            return;
           }
           
           // If auth manager not ready, retry (increase retries for production)
@@ -275,7 +325,8 @@ Sign Up
             return;
           }
           
-          const isLoggedIn = authManager.isUserLoggedIn() && hasValidSession;
+          // Consider user logged in if EITHER auth manager says so OR we have a valid session
+          const isLoggedIn = (authManager && authManager.isUserLoggedIn()) || hasValidSession;
           
           if (!isLoggedIn) {
             // Redirect to login with smooth transition

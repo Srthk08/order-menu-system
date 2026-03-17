@@ -206,12 +206,61 @@ const style = categoryStyles[product.category];
         // Check auth status with retries
         const checkAuth = () => {
           const authManager = window.globalAuthManager || window.simpleAuthManager;
+
+          // Read session/user from BOTH sessionStorage and localStorage (deployment-safe)
           const sessionData = sessionStorage.getItem('simple-auth-session');
-          const hasValidSession = sessionData && sessionData !== 'null' && sessionData !== '{}';
+          const localSessionData = !sessionData || sessionData === 'null' || sessionData === '{}' 
+            ? localStorage.getItem('simple-auth-session') 
+            : null;
+          const storedUser = localStorage.getItem('simple-auth-user');
+
+          let hasValidSession = false;
+          let effectiveSession = null;
+
+          // Prefer sessionStorage
+          if (sessionData && sessionData !== 'null' && sessionData !== '{}') {
+            try {
+              const parsed = JSON.parse(sessionData);
+              if (parsed && parsed.user && parsed.user.email) {
+                hasValidSession = true;
+                effectiveSession = parsed;
+              }
+            } catch (e) {
+              console.log('SessionStorage parse error in product auth, trying localStorage...', e);
+            }
+          }
+
+          // Fallback to localStorage session
+          if (!hasValidSession && localSessionData && localSessionData !== 'null' && localSessionData !== '{}') {
+            try {
+              const parsed = JSON.parse(localSessionData);
+              if (parsed && parsed.user && parsed.user.email) {
+                hasValidSession = true;
+                effectiveSession = parsed;
+                // Sync back to sessionStorage for future checks
+                sessionStorage.setItem('simple-auth-session', localSessionData);
+              }
+            } catch (e) {
+              console.log('LocalStorage session parse error in product auth, trying user data...', e);
+            }
+          }
+
+          // Final fallback: plain user data in localStorage
+          if (!hasValidSession && storedUser && storedUser !== 'null' && storedUser !== '{}') {
+            try {
+              const user = JSON.parse(storedUser);
+              if (user && user.email) {
+                hasValidSession = true;
+                effectiveSession = { user, access_token: 'simple-token-' + Date.now(), timestamp: Date.now() };
+                sessionStorage.setItem('simple-auth-session', JSON.stringify(effectiveSession));
+              }
+            } catch (e) {
+              console.log('LocalStorage user parse error in product auth:', e);
+            }
+          }
           
-          // Quick check: if we have session data, user might be logged in
-          // If no session data at all, redirect immediately without waiting
-          if (!sessionData || sessionData === 'null' || sessionData === '{}') {
+          // Quick check: if we have NO valid session anywhere, redirect immediately
+          if (!hasValidSession) {
             // No session data - redirect immediately with smooth transition
             if (document.body) {
               document.body.style.transition = 'opacity 0.3s ease-out';
@@ -229,27 +278,19 @@ const style = categoryStyles[product.category];
           
           // SPECIAL HANDLING FOR ORDER MENU SYSTEM: If we have session data, trust it
           // This prevents redirect loops in production where auth manager might load slower
-          if (isOrderMenuSystem && hasValidSession) {
-            // Try to parse session to verify it's valid
-            try {
-              const session = JSON.parse(sessionData);
-              if (session && session.user && session.user.email) {
-                // Valid session data exists - allow access for OMS even if auth manager not ready
-                console.log('✅ Order Menu System - valid session found, allowing access');
-                if (document.body) {
-                  document.body.style.transition = 'opacity 0.3s ease-in';
-                  document.body.style.opacity = '1';
-                }
-                if (document.documentElement) {
-                  document.documentElement.style.transition = 'opacity 0.3s ease-in';
-                  document.documentElement.style.opacity = '1';
-                }
-                return;
-              }
-            } catch (e) {
-              // Invalid session data, continue with normal check
-              console.log('Session data parse error, continuing with auth manager check');
+          if (isOrderMenuSystem && hasValidSession && effectiveSession) {
+            const session = effectiveSession;
+            // Valid session data exists - allow access for OMS even if auth manager not ready
+            console.log('✅ Order Menu System - valid session found, allowing access');
+            if (document.body) {
+              document.body.style.transition = 'opacity 0.3s ease-in';
+              document.body.style.opacity = '1';
             }
+            if (document.documentElement) {
+              document.documentElement.style.transition = 'opacity 0.3s ease-in';
+              document.documentElement.style.opacity = '1';
+            }
+            return;
           }
           
           // If auth manager not ready, retry (increase retries for production)
@@ -297,7 +338,8 @@ const style = categoryStyles[product.category];
             return;
           }
           
-          const isLoggedIn = authManager.isUserLoggedIn() && hasValidSession;
+          // Consider user logged in if EITHER auth manager says so OR we have a valid session
+          const isLoggedIn = (authManager && authManager.isUserLoggedIn()) || hasValidSession;
           
           if (!isLoggedIn) {
             // Redirect to login with smooth transition
