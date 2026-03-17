@@ -529,7 +529,63 @@ const { title, description } = Astro.props;
     async function checkAdminAccess() {
       try {
         console.log('🔒 AdminGuard: Checking admin access...');
-        
+
+        // 1) PREFERRED: trust the global auth manager (same logic as AdminGuard.astro)
+        try {
+          const authManager = window.globalAuthManager || window.simpleAuthManager;
+          if (authManager && typeof authManager.getCurrentUser === 'function') {
+            const currentUser = authManager.getCurrentUser();
+            if (currentUser) {
+              console.log('🔍 AdminGuard: currentUser from auth manager:', {
+                email: currentUser.email,
+                role: currentUser.role
+              });
+
+              const isAdminUser =
+                currentUser.role === 'admin' ||
+                currentUser.role === 'administrator' ||
+                currentUser.email === 'abhi1@gmail.com';
+
+              if (isAdminUser) {
+                console.log('✅ AdminGuard: Access granted from auth manager (role/email match)');
+                showAdminContent();
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ AdminGuard: Failed to read currentUser from auth manager:', e);
+        }
+
+        // 2) NEXT: trust the role stored in session (simple-auth-session)
+        let sessionUser = null;
+        try {
+          const sessionData = sessionStorage.getItem('simple-auth-session');
+          if (sessionData) {
+            const session = JSON.parse(sessionData);
+            if (session && session.user) {
+              sessionUser = session.user;
+              console.log('🔍 AdminGuard: Session user found:', {
+                email: sessionUser.email,
+                role: sessionUser.role
+              });
+              const isAdminSessionUser =
+                sessionUser.role === 'admin' ||
+                sessionUser.role === 'administrator' ||
+                sessionUser.email === 'abhi1@gmail.com';
+
+              if (isAdminSessionUser) {
+                console.log('✅ AdminGuard: Access granted from session (role/email match):', sessionUser.role);
+                showAdminContent();
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ AdminGuard: Failed to read session user:', e);
+        }
+
+        // 3) FALLBACK: use Supabase auth + profiles.role (original logic)
         // Wait for Supabase to be available
         if (!supabase) {
           await waitForSupabase();
@@ -539,18 +595,18 @@ const { title, description } = Astro.props;
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         
         if (userError) {
-          console.error('❌ AdminGuard: Error getting user:', userError);
+          console.error('❌ AdminGuard: Error getting user from Supabase:', userError);
           showAccessDenied('Authentication error. Please login again.');
           return;
         }
         
         if (!user) {
-          console.log('❌ AdminGuard: No user logged in');
+          console.log('❌ AdminGuard: No Supabase user logged in');
           showAccessDenied('Please login to access admin panel');
           return;
         }
         
-        console.log('✅ AdminGuard: User found:', user.email);
+        console.log('✅ AdminGuard: Supabase user found:', user.email);
         
         // Get user profile to check role
         const { data: profile, error: profileError } = await supabase
@@ -560,18 +616,18 @@ const { title, description } = Astro.props;
           .single();
         
         if (profileError) {
-          console.error('❌ AdminGuard: Error getting profile:', profileError);
+          console.error('❌ AdminGuard: Error getting profile from Supabase:', profileError);
           showAccessDenied('Error checking user permissions');
           return;
         }
         
         if (profile.role !== 'admin') {
-          console.log('❌ AdminGuard: User does not have admin role. Role:', profile.role);
+          console.log('❌ AdminGuard: User does not have admin role in Supabase. Role:', profile.role);
           showAccessDenied('Access denied. Admin privileges required.');
           return;
         }
         
-        console.log('✅ AdminGuard: Admin access granted for user:', user.email);
+        console.log('✅ AdminGuard: Admin access granted for Supabase user:', user.email);
         
         // Show admin content
         showAdminContent();

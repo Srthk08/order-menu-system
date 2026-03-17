@@ -197,18 +197,70 @@ import AuthGuard from '../components/AuthGuard.astro';
 
 <script>
   // Authentication handled by AuthGuard component
+  // Shared Supabase client helper (reuse global client from Layout)
+  let supabaseClient = null;
+
+  async function getSupabaseClient(maxRetries = 50, delayMs = 100) {
+    // Already have a working client
+    if (supabaseClient && typeof supabaseClient.from === 'function') {
+      return supabaseClient;
+    }
+
+    const supabaseUrl = 'https://lmrrdcaavwwletcjcpqv.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ';
+
+    let attempts = 0;
+    while (attempts < maxRetries) {
+      attempts++;
+
+      // Case 1: global client already created in Layout.astro
+      if (window.supabase && typeof window.supabase.from === 'function') {
+        supabaseClient = window.supabase;
+        console.log('✅ Orders page: using global Supabase client');
+        return supabaseClient;
+      }
+
+      // Case 2: library loaded, but client not created yet on this page
+      if (window.supabase && typeof window.supabase.createClient === 'function') {
+        try {
+          supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+            auth: {
+              autoRefreshToken: true,
+              persistSession: true,
+              detectSessionInUrl: true,
+              flowType: 'pkce'
+            }
+          });
+          window.supabase = supabaseClient;
+          console.log('✅ Orders page: created Supabase client from library');
+          return supabaseClient;
+        } catch (e) {
+          console.warn('⚠️ Orders page: failed to create Supabase client from library, will retry...', e);
+        }
+      }
+
+      if (attempts % 10 === 0) {
+        console.log(`⏳ Orders page: waiting for Supabase client... (${attempts}/${maxRetries})`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    throw new Error('Supabase client not available on Orders page.');
+  }
 
   // Orders functionality
   class Orders {
     constructor() {
       this.orders = [];
+      this.currentUserId = null;
+      this.currentUserEmail = null;
       this.init();
     }
-
+    
     init() {
       this.loadOrders().then(() => this.renderOrders());
     }
-
+    
     async loadOrders() {
       // Load orders from multiple localStorage sources
       const projectRequirements = localStorage.getItem('project-requirements');
@@ -240,15 +292,19 @@ import AuthGuard from '../components/AuthGuard.astro';
         }
         if (!currentUser) return;
       }
-
-      // Normalize to a plain email string for downstream queries/filters (lowercase for consistent matching)
+      
+      // Store current user id/email for downstream filters
       const userEmail = (currentUser?.email || null)?.toLowerCase().trim();
-      if (!userEmail) {
-        console.log('No user email available – cannot load orders');
+      const userId = currentUser?.id || null;
+      this.currentUserEmail = userEmail;
+      this.currentUserId = userId;
+      
+      if (!userEmail && !userId) {
+        console.log('No user email or id available – cannot load orders');
         return;
       }
       
-      console.log(' Loading orders for user email:', userEmail);
+      console.log(' Loading orders for user:', { email: userEmail, id: userId });
       
       // Load project requirements as orders (filter by email if available)
       if (projectRequirements) {
@@ -329,7 +385,7 @@ import AuthGuard from '../components/AuthGuard.astro';
 
       // Load Supabase-backed orders and customizations for this user
       try {
-        await this.loadSupabaseOrders(userEmail);
+        await this.loadSupabaseOrders(userEmail, userId);
       } catch (e) {
         console.warn('Failed to load Supabase orders:', e);
       }
@@ -357,67 +413,73 @@ import AuthGuard from '../components/AuthGuard.astro';
       console.log(' Orders breakdown by source:', ordersBySource);
     }
 
-    async loadSupabaseOrders(userEmail) {
+    async loadSupabaseOrders(userEmail, userId) {
       try {
-        const { supabase } = await import('../lib/supabase');
-        console.log(' Loading Supabase orders for email:', userEmail);
+        const supabase = await getSupabaseClient();
+        console.log(' Loading Supabase orders for user:', { email: userEmail, id: userId });
+
         
-        // Fetch order_customizations (Order Menu System submissions)
-        // Try both 'email' and 'user_email' field names to handle schema variations
-        // Combine results from both queries to ensure we get all orders
+        const seenIds = new Set(); // Track IDs to avoid duplicates
+        const lcEmail = (userEmail || '').toLowerCase();
+        const userIdStr = userId ? String(userId).trim() : null;
+
+        // Helper: does this row belong to the current user (by email or user id)?
+        const belongsToUser = (row) => {
+          if (!row) return false;
+          
+          // Match by email if we have one
+          if (lcEmail) {
+            const emailCandidates = [
+              row.email,
+              row.user_email,
+              row.customer_email,
+              row.contact_email,
+              row.userEmail,
+            ].filter(Boolean);
+            if (emailCandidates.some((val) => String(val).toLowerCase().trim() === lcEmail)) {
+              return true;
+            }
+          }
+
+          // Match by Supabase user id if present
+          if (userIdStr) {
+            const idCandidates = [
+              row.user_id,
+              row.userId,
+              row.profile_id,
+            ].filter(Boolean);
+            if (idCandidates.some((val) => String(val).trim() === userIdStr)) {
+              return true;
+            }
+          }
+
+          return false;
+        };
+
+        // === 1) order_customizations (Order Menu System submissions) ===
         let customizations = [];
         let customizationsError = null;
-        const seenIds = new Set(); // Track IDs to avoid duplicates
-        
-        // Try with 'email' field (case-insensitive matching)
-        const { data: customizationsEmail, error: errorEmail } = await supabase
+
+        const { data: allCustomizations, error: allCustErr } = await supabase
           .from('order_customizations')
           .select('*')
-          .ilike('email', userEmail) // Use ilike for case-insensitive matching
           .order('created_at', { ascending: false });
-        
-        if (!errorEmail && customizationsEmail && customizationsEmail.length > 0) {
-          customizationsEmail.forEach(cz => {
-            if (!seenIds.has(cz.id)) {
-              customizations.push(cz);
-              seenIds.add(cz.id);
-            }
-          });
-          console.log(' Found', customizationsEmail.length, 'orders using "email" field');
-        } else if (errorEmail) {
-          console.log(' Error querying with "email" field:', errorEmail.message);
+
+        if (allCustErr) {
+          customizationsError = allCustErr;
+          console.warn(' Error loading order_customizations:', allCustErr.message);
+        } else if (allCustomizations && allCustomizations.length > 0) {
+          customizations = allCustomizations.filter(belongsToUser);
+          console.log(
+            ' Found',
+            customizations.length,
+            'order_customizations rows for this user (from',
+            allCustomizations.length,
+            'total)'
+          );
         }
-        
-        // Also try with 'user_email' field and combine results (case-insensitive)
-        const { data: customizationsUserEmail, error: errorUserEmail } = await supabase
-          .from('order_customizations')
-          .select('*')
-          .ilike('user_email', userEmail) // Use ilike for case-insensitive matching
-          .order('created_at', { ascending: false });
-        
-        if (!errorUserEmail && customizationsUserEmail && customizationsUserEmail.length > 0) {
-          customizationsUserEmail.forEach(cz => {
-            if (!seenIds.has(cz.id)) {
-              customizations.push(cz);
-              seenIds.add(cz.id);
-            }
-          });
-          console.log(' Found', customizationsUserEmail.length, 'orders using "user_email" field');
-        } else if (errorUserEmail) {
-          console.log(' Error querying with "user_email" field:', errorUserEmail.message);
-        }
-        
-        // Set error only if both queries failed
-        if (errorEmail && errorUserEmail) {
-          customizationsError = errorUserEmail || errorEmail;
-          console.error(' Both queries failed for order_customizations');
-        }
-        
-        if (customizationsError) {
-          console.warn(' Error loading order_customizations, continuing with other sources...', customizationsError);
-        }
-        
-        // Sort combined results by created_at
+
+        // Sort by created_at
         customizations.sort((a, b) => {
           const dateA = new Date(a.created_at || 0);
           const dateB = new Date(b.created_at || 0);
@@ -456,11 +518,10 @@ import AuthGuard from '../components/AuthGuard.astro';
           });
         });
 
-        // Fetch cart_customizations (all orders, not just completed) - case-insensitive
-        const { data: carts, error: cartsError } = await supabase
+        // === 2) cart_customizations (all orders, not just completed) ===
+        const { data: allCarts, error: cartsError } = await supabase
           .from('cart_customizations')
           .select('*')
-          .ilike('user_email', userEmail) // Use ilike for case-insensitive matching
           .in('cart_status', ['completed', 'pending', 'confirmed', 'in_progress', 'cancelled'])
           .order('updated_at', { ascending: false });
         
@@ -469,8 +530,9 @@ import AuthGuard from '../components/AuthGuard.astro';
           throw cartsError;
         }
         
-        console.log('📦 Processing', (carts || []).length, 'cart_customizations...');
-        (carts || []).forEach((cart, index) => {
+        const carts = (allCarts || []).filter(belongsToUser);
+        console.log('📦 Processing', carts.length, 'cart_customizations for this user...');
+        carts.forEach((cart, index) => {
           // Check for duplicates using the cart ID
           const cartId = cart.id || `CART-${Date.now()}-${index}`;
           if (seenIds.has(cartId)) {
@@ -523,19 +585,19 @@ import AuthGuard from '../components/AuthGuard.astro';
           });
         });
 
-        // Fetch customization_forms (for other 4 products: restaurant-website, streaming-mobile-app, android-tv-app, restaurant-menu-system) - case-insensitive
-        const { data: customForms, error: customFormsError } = await supabase
+        // === 3) customization_forms (for other 4 products) ===
+        const { data: allCustomForms, error: customFormsError } = await supabase
           .from('customization_forms')
           .select('*')
-          .ilike('contact_email', userEmail) // Use ilike for case-insensitive matching
           .order('created_at', { ascending: false });
         
         if (customFormsError) {
           console.warn(' Error loading customization_forms:', customFormsError);
           // Don't throw - continue with other orders
         } else {
-          console.log('📦 Processing', (customForms || []).length, 'customization_forms...');
-          (customForms || []).forEach((form, index) => {
+          const customForms = (allCustomForms || []).filter(belongsToUser);
+          console.log('📦 Processing', customForms.length, 'customization_forms for this user...');
+          customForms.forEach((form, index) => {
             // Check for duplicates using the form ID
             const formId = form.id || `CF-${Date.now()}-${index}`;
             if (seenIds.has(formId)) {
@@ -585,6 +647,52 @@ import AuthGuard from '../components/AuthGuard.astro';
               }
             });
           });
+        }
+
+        // === 4) main orders table (generic orders) ===
+        try {
+          const { data: allDbOrders, error: dbOrdersError } = await supabase
+            .from('orders')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (dbOrdersError) {
+            console.warn(' Error loading orders table for My Orders page:', dbOrdersError);
+          } else if (allDbOrders && allDbOrders.length > 0) {
+            const dbOrders = allDbOrders.filter(belongsToUser);
+            console.log(
+              '📦 Processing',
+              dbOrders.length,
+              'rows from orders table for this user (from',
+              allDbOrders.length,
+              'total)'
+            );
+            dbOrders.forEach((o, index) => {
+              const baseId = o.id || o.order_number || `ORD-${Date.now()}-${index}`;
+              if (seenIds.has(baseId)) {
+                return;
+              }
+              seenIds.add(baseId);
+
+              this.orders.push({
+                orderId: baseId,
+                orderDate: o.created_at || o.updated_at || new Date().toISOString(),
+                total: Number(o.total_amount) || 0,
+                projectName: o.service_name || 'Order',
+                description: o.description || 'Service order',
+                status: o.status || 'pending',
+                requirements: {
+                  projectName: o.service_name,
+                  contactPerson: o.customer_name,
+                  email: o.customer_email || o.user_email || o.email,
+                  phone: o.phone_number,
+                  additionalRequirements: o.notes
+                }
+              });
+            });
+          }
+        } catch (ordersTableError) {
+          console.warn(' Failed to load orders table for My Orders page:', ordersTableError);
         }
       } catch (error) {
         console.error('Error loading Supabase orders:', error);

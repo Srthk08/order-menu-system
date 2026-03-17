@@ -2408,8 +2408,6 @@ import AuthGuard from '../components/AuthGuard.astro';
             p_state: formDataObj.state,
             p_pincode: formDataObj.pincode,
             p_country: formDataObj.country,
-            p_contact_person: formDataObj.contactPerson,
-            p_phone_number: formattedPhone,
             p_user_id: null,
             p_logo_url: rpcLogoUrl,
             p_logo_filename: rpcLogoFilename,
@@ -2828,25 +2826,34 @@ import AuthGuard from '../components/AuthGuard.astro';
     const phoneCountryCodeSelect = document.getElementById('phone_country_code') as HTMLSelectElement;
     console.log('📞 Phone country code select:', phoneCountryCodeSelect ? phoneCountryCodeSelect.value : 'not found');
     
-    try {
-      let supabase;
       try {
-        // Get Supabase client with fast timeout (5 seconds)
-        const importPromise = import('../lib/supabase');
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Supabase import timed out')), 5000);
-        });
-        
-        const supabaseModule = await Promise.race([importPromise, timeoutPromise]) as any;
-        supabase = supabaseModule.supabase;
-      } catch (importError: any) {
-        console.error(' Supabase import error:', importError.message);
-        throw new Error('Failed to load database connection. Please refresh the page and try again.');
-      }
-      
-      if (!supabase || typeof supabase.from !== 'function') {
-        throw new Error('Database connection failed. Please refresh the page and try again.');
-      }
+        // Load Supabase config (URL + anon key) from shared lib, with a timeout
+        let supabaseModule: any = null;
+        try {
+          const importPromise = import('../lib/supabase');
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Supabase import timed out')), 5000);
+          });
+          supabaseModule = await Promise.race([importPromise, timeoutPromise]);
+        } catch (importError: any) {
+          console.error('❌ Supabase import error:', importError?.message || importError);
+          throw new Error('Failed to load database configuration. Please refresh the page and try again.');
+        }
+
+        const supabaseUrl = supabaseModule.supabaseUrl as string;
+        const supabaseAnonKey = supabaseModule.supabaseAnonKey as string;
+        const supabase = supabaseModule.supabase;
+
+        if (!supabaseUrl || !supabaseAnonKey) {
+          console.error('❌ Supabase config missing:', { supabaseUrl, supabaseAnonKey: !!supabaseAnonKey });
+          throw new Error('Database configuration is missing. Please contact support.');
+        }
+
+        if (!supabase || typeof supabase.from !== 'function') {
+          console.warn('⚠️ Supabase client instance invalid, but REST API will still work via fetch.');
+        }
+
+        console.log('✅ Supabase configuration loaded for order save');
       
       // Skip client-side bucket listing; assume buckets exist and handle upload errors gracefully.
       
@@ -2942,89 +2949,84 @@ import AuthGuard from '../components/AuthGuard.astro';
       
       console.log('🕐 Timestamp added - Created at:', now);
 
-      // Minimal logging for speed
-      console.log(' Saving order customization data...');
+      // Log the data being saved
+      console.log('📝 Preparing to save order customization data...');
+      console.log('📝 Insert data:', JSON.stringify(insertData, null, 2));
+      console.log('📝 Insert data keys:', Object.keys(insertData));
+      console.log('📝 Insert data values:', Object.values(insertData));
 
-      // Save to database IMMEDIATELY (skip connection test to save time)
+      // Save to database IMMEDIATELY via Supabase REST API
       const dbInsertStartTime = Date.now();
-      console.log('📤 Saving to database...');
+      console.log('📤 Saving to database via REST API...');
+      console.log('📤 Table: order_customizations');
       
       let savedData, saveError;
       
-      // Retry function with exponential backoff
+      // Retry function with exponential backoff using fetch
       const insertWithRetry = async (maxRetries = 2, retryDelay = 1000): Promise<any> => {
-        let currentTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        const restUrl = `${supabaseUrl}/rest/v1/order_customizations`;
         
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
             if (attempt > 0) {
-              console.log(` Retrying database insert (attempt ${attempt + 1}/${maxRetries + 1})...`);
+              console.log(` Retrying REST insert (attempt ${attempt + 1}/${maxRetries + 1})...`);
               await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
             }
-            
-            // Create timeout promise that properly rejects
-            const timeoutPromise = new Promise<never>((_, reject) => {
-              currentTimeoutId = setTimeout(() => {
-                reject(new Error('Database insert timed out after 30 seconds'));
-              }, 30000); // Increased to 30 seconds for better reliability
+
+            console.log(`📤 Attempt ${attempt + 1}: POST ${restUrl}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+            const response = await fetch(restUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+                Prefer: 'return=representation'
+              },
+              body: JSON.stringify(insertData),
+              signal: controller.signal
             });
-            
-            // Create the insert promise
-            const insertPromise = supabase
-              .from('order_customizations')
-              .insert(insertData)
-              .select();
-            
-            // Race the insert against the timeout
-            const result = await Promise.race([insertPromise, timeoutPromise]);
-            
-            // Clear timeout if operation completed
-            if (currentTimeoutId) {
-              clearTimeout(currentTimeoutId);
-              currentTimeoutId = null;
+
+            clearTimeout(timeoutId);
+
+            const text = await response.text();
+            let json: any = null;
+            try {
+              json = text ? JSON.parse(text) : null;
+            } catch {
+              json = null;
             }
-            
-            // Properly handle Supabase response format { data, error }
-            if (result && typeof result === 'object' && 'data' in result) {
-              const supabaseResult = result as { data: any; error: any };
-              if (supabaseResult.error) {
-                // If it's a retryable error, throw to retry
-                if (attempt < maxRetries && (
-                  supabaseResult.error.code === 'PGRST301' || // Connection error
-                  supabaseResult.error.message?.includes('timeout') ||
-                  supabaseResult.error.message?.includes('network')
-                )) {
-                  throw supabaseResult.error;
-                }
-                return { data: null, error: supabaseResult.error };
+
+            if (!response.ok) {
+              const err: any = new Error(json?.message || text || 'Unknown error from database');
+              err.code = json?.code;
+              err.details = json?.details;
+              err.hint = json?.hint;
+
+              // Retry on network / timeout errors
+              if (
+                attempt < maxRetries &&
+                (err.message.includes('timeout') || err.message.includes('network') || response.status >= 500)
+              ) {
+                console.warn(` REST insert attempt ${attempt + 1} failed (${response.status}), will retry...`, err.message);
+                continue;
               }
-              return { data: supabaseResult.data, error: null };
+
+              return { data: null, error: err };
             }
-            
-            // Fallback for unexpected response format
-            return { data: result, error: null };
+
+            return { data: json, error: null };
           } catch (dbError: any) {
-            // Clear timeout on error
-            if (currentTimeoutId) {
-              clearTimeout(currentTimeoutId);
-              currentTimeoutId = null;
-            }
-            
-            // If it's the last attempt or not a retryable error, return the error
-            if (attempt === maxRetries || (
-              dbError?.message && 
-              !dbError.message.includes('timeout') && 
-              !dbError.message.includes('network')
-            )) {
+            if (attempt === maxRetries) {
               return { data: null, error: dbError };
             }
-            
-            // Otherwise, continue to next retry
-            console.warn(` Database insert attempt ${attempt + 1} failed, will retry...`, dbError?.message);
+            console.warn(` REST insert attempt ${attempt + 1} threw error, will retry...`, dbError?.message || dbError);
           }
         }
-        
-        return { data: null, error: new Error('All retry attempts failed') };
+
+        return { data: null, error: new Error('All REST retry attempts failed') };
       };
       
       try {
@@ -3033,8 +3035,20 @@ import AuthGuard from '../components/AuthGuard.astro';
         saveError = result.error;
         
         const dbInsertElapsed = Math.round((Date.now() - dbInsertStartTime) / 1000);
-        console.log(` Database insert completed in ${dbInsertElapsed} seconds`);
-        console.log(' Insert result:', { savedData, saveError });
+        console.log(`✅ Database insert completed in ${dbInsertElapsed} seconds`);
+        console.log('✅ Insert result:', { 
+          hasData: !!savedData, 
+          dataLength: savedData ? (Array.isArray(savedData) ? savedData.length : 1) : 0,
+          hasError: !!saveError,
+          error: saveError 
+        });
+        
+        if (savedData) {
+          console.log('✅ Saved data details:', savedData);
+        }
+        if (saveError) {
+          console.error('❌ Save error details:', saveError);
+        }
       } catch (dbError: any) {
         console.error(' Database insert exception:', dbError);
         console.error(' Error message:', dbError?.message);
@@ -3064,8 +3078,11 @@ import AuthGuard from '../components/AuthGuard.astro';
         // Don't throw here - let the error handling below deal with it
       }
       if (saveError) {
-        console.error(' Error saving:', saveError.message || saveError.code || 'Unknown error');
-        console.error(' Full error object:', saveError);
+        console.error('❌ Error saving:', saveError.message || saveError.code || 'Unknown error');
+        console.error('❌ Full error object:', saveError);
+        console.error('❌ Error code:', saveError.code);
+        console.error('❌ Error details:', saveError.details);
+        console.error('❌ Error hint:', saveError.hint);
         
         // Create detailed error message
         let errorMessage = saveError.message || saveError.hint || 'Failed to save your order.';
@@ -3100,7 +3117,7 @@ import AuthGuard from '../components/AuthGuard.astro';
           const safeErrorCode = (saveError.code || 'Unknown').replace(/"/g, '&quot;');
           errorDiv.innerHTML = `
             <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-              <h4 class="text-red-800 font-semibold mb-2"> Error Saving Order</h4>
+              <h4 class="text-red-800 font-semibold mb-2">❌ Error Saving Order</h4>
               <p class="text-red-700 font-medium">${safeErrorMessage}</p>
               ${safeErrorDetails ? `<p class="text-red-600 text-sm mt-2">${safeErrorDetails}</p>` : ''}
               <p class="text-red-600 text-sm mt-2">Error Code: ${safeErrorCode}</p>
@@ -3124,21 +3141,20 @@ import AuthGuard from '../components/AuthGuard.astro';
 
       // Handle both array and single object responses
       const savedRecord = Array.isArray(savedData) ? savedData[0] : savedData;
-      console.log(' Order saved successfully! ID:', savedRecord?.id);
+      console.log('✅ Order saved successfully! ID:', savedRecord?.id);
+      console.log('✅ Saved record:', savedRecord);
 
       const savedRecordId = savedRecord?.id;
       
-      // Show success message immediately (files will upload in background)
-      const successDiv = document.getElementById('validation-errors');
-      if (successDiv) {
-        successDiv.classList.remove('hidden');
-        successDiv.innerHTML = `
-          <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h4 class="text-green-800 font-semibold mb-2"> Order Submitted Successfully!</h4>
-            <p class="text-green-700">Your order has been saved. Files are uploading in the background...</p>
-          </div>
-        `;
+      if (!savedRecordId) {
+        console.error('❌ No ID returned from saved record');
+        throw new Error('Order was saved but no ID was returned. Please contact support.');
       }
+      
+      // Show success message immediately (files will upload in background)
+      // Note: Success message will be shown by button handler after form is cleared
+      console.log('✅ Order saved successfully to Supabase with ID:', savedRecordId);
+      console.log('✅ Save confirmed - form will be cleared by button handler');
 
       // Upload files in background and update record (non-blocking)
       // This runs asynchronously and doesn't block the main save operation
@@ -3231,14 +3247,19 @@ import AuthGuard from '../components/AuthGuard.astro';
         console.error(' Background upload promise error:', err);
       });
       
-      // IMPORTANT: Return immediately after saving data
-      // Button will reset in finally block, files upload in background
-      return;
-
-      // Note: Form clearing is handled by button handler after successful save
+      // IMPORTANT: Return successfully after saving data
+      // Button handler will clear form and reset button
+      // Files upload in background (non-blocking)
+      console.log('✅ handleOrderMenuFormSubmission completed successfully');
+      return { success: true, recordId: savedRecordId };
 
     } catch (error: any) {
-      console.error(' Error in form submission:', error);
+      console.error('❌ Error in form submission:', error);
+      console.error('❌ Error details:', {
+        message: error?.message,
+        code: error?.code,
+        stack: error?.stack
+      });
       // Re-throw error so button handler can catch it and reset button state
       throw new Error(error.message || 'An error occurred while submitting your order. Please try again.');
     }
@@ -4739,48 +4760,7 @@ Status: Submitted
     '500007': { city: 'Hyderabad', state: 'Telangana' },
     '500008': { city: 'Hyderabad', state: 'Telangana' },
     '500009': { city: 'Hyderabad', state: 'Telangana' },
-    '500010': { city: 'Hyderabad', state: 'Telangana' },
-    // More common Indian pincodes
-    '110001': { city: 'Delhi', state: 'Delhi' },
-    '110002': { city: 'Delhi', state: 'Delhi' },
-    '110003': { city: 'Delhi', state: 'Delhi' },
-    '110004': { city: 'Delhi', state: 'Delhi' },
-    '110005': { city: 'Delhi', state: 'Delhi' },
-    '110006': { city: 'Delhi', state: 'Delhi' },
-    '110007': { city: 'Delhi', state: 'Delhi' },
-    '110008': { city: 'Delhi', state: 'Delhi' },
-    '110009': { city: 'Delhi', state: 'Delhi' },
-    '110010': { city: 'Delhi', state: 'Delhi' },
-    '560001': { city: 'Bangalore', state: 'Karnataka' },
-    '560002': { city: 'Bangalore', state: 'Karnataka' },
-    '560003': { city: 'Bangalore', state: 'Karnataka' },
-    '560004': { city: 'Bangalore', state: 'Karnataka' },
-    '560005': { city: 'Bangalore', state: 'Karnataka' },
-    '560006': { city: 'Bangalore', state: 'Karnataka' },
-    '560007': { city: 'Bangalore', state: 'Karnataka' },
-    '560008': { city: 'Bangalore', state: 'Karnataka' },
-    '560009': { city: 'Bangalore', state: 'Karnataka' },
-    '560010': { city: 'Bangalore', state: 'Karnataka' },
-    '600001': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600002': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600003': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600004': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600005': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600006': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600007': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600008': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600009': { city: 'Chennai', state: 'Tamil Nadu' },
-    '600010': { city: 'Chennai', state: 'Tamil Nadu' },
-    '700001': { city: 'Kolkata', state: 'West Bengal' },
-    '700002': { city: 'Kolkata', state: 'West Bengal' },
-    '700003': { city: 'Kolkata', state: 'West Bengal' },
-    '700004': { city: 'Kolkata', state: 'West Bengal' },
-    '700005': { city: 'Kolkata', state: 'West Bengal' },
-    '700006': { city: 'Kolkata', state: 'West Bengal' },
-    '700007': { city: 'Kolkata', state: 'West Bengal' },
-    '700008': { city: 'Kolkata', state: 'West Bengal' },
-    '700009': { city: 'Kolkata', state: 'West Bengal' },
-    '700010': { city: 'Kolkata', state: 'West Bengal' }
+    '500010': { city: 'Hyderabad', state: 'Telangana' }
   };
 
 
@@ -5152,33 +5132,109 @@ Status: Submitted
           try {
             // Call the save operation directly without aggressive timeout
             // The function has its own timeout protection for database operations
-            await handleOrderMenuFormSubmission();
+            const saveResult = await handleOrderMenuFormSubmission();
             
           // Clear timeout warning if operation completed
           if (timeoutWarning) clearTimeout(timeoutWarning);
             
             const elapsed = Math.round((Date.now() - saveStartTime) / 1000);
-            console.log(' handleOrderMenuFormSubmission() COMPLETED ');
-            console.log(' DATA SUCCESSFULLY SAVED TO SUPABASE ');
+            console.log('✅ handleOrderMenuFormSubmission() COMPLETED ');
+            console.log('✅ Save result:', saveResult);
+            
+            // Verify save was successful
+            if (!saveResult || !saveResult.success) {
+              throw new Error('Save operation did not return success confirmation');
+            }
+            
+            console.log('✅ DATA SUCCESSFULLY SAVED TO SUPABASE ');
             console.log(`🕐 Save operation completed in ${elapsed} seconds`);
             console.log('🕐 Save operation completed at:', new Date().toISOString());
             
-            // After successful save, clear both forms if present
-            try { document.getElementById('order-menu-form')?.reset(); } catch {}
-            try { document.getElementById('customization-form')?.reset(); } catch {}
+            // After confirmed successful save, clear both forms if present
+            console.log('🧹 Starting form cleanup...');
+            
+            try { 
+              const orderForm = document.getElementById('order-menu-form') as HTMLFormElement;
+              if (orderForm) {
+                orderForm.reset();
+                console.log('✅ Order menu form reset');
+                
+                // Also clear all input values manually to ensure they're empty
+                const inputs = orderForm.querySelectorAll('input, textarea, select');
+                inputs.forEach((input: any) => {
+                  if (input.type === 'file') {
+                    input.value = '';
+                  } else if (input.type !== 'submit' && input.type !== 'button') {
+                    input.value = '';
+                  }
+                });
+                console.log('✅ All form inputs cleared');
+              } else {
+                console.warn('⚠️ Order menu form not found');
+              }
+            } catch (formError) {
+              console.error('❌ Error clearing order menu form:', formError);
+            }
+            
+            try { 
+              const customForm = document.getElementById('customization-form') as HTMLFormElement;
+              if (customForm) {
+                customForm.reset();
+                console.log('✅ Customization form reset');
+              }
+            } catch (formError) {
+              console.error('❌ Error clearing customization form:', formError);
+            }
             
             // Clear logo and menu photos fields
-            clearFormFileFields();
+            try {
+              clearFormFileFields();
+              console.log('✅ File fields cleared');
+            } catch (fileError) {
+              console.error('❌ Error clearing file fields:', fileError);
+            }
+            
+            // Clear cached files
+            try {
+              if (typeof cachedMenuPhotos !== 'undefined') {
+                cachedMenuPhotos.length = 0;
+                console.log('✅ Cached menu photos cleared');
+              }
+              if (typeof cachedLogoFile !== 'undefined') {
+                cachedLogoFile = null;
+                console.log('✅ Cached logo file cleared');
+              }
+            } catch (cacheError) {
+              console.error('❌ Error clearing cached files:', cacheError);
+            }
+            
+            // Show success message
+            const successDiv = document.getElementById('validation-errors');
+            if (successDiv) {
+              successDiv.classList.remove('hidden');
+              successDiv.innerHTML = `
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 class="text-green-800 font-semibold mb-2">✅ Order Saved Successfully!</h4>
+                  <p class="text-green-700">Your order has been saved to the database. You can view it in "My Orders".</p>
+                </div>
+              `;
+              console.log('✅ Success message displayed');
+            }
             
             // Show success confirmation
-            console.log(' Button will be reset in finally block');
+            console.log('✅ Form cleanup completed - Button will be reset in finally block');
           } catch (saveError: any) {
             // Clear timeout warning on error
             if (timeoutWarning) clearTimeout(timeoutWarning);
             
             const elapsed = Math.round((Date.now() - saveStartTime) / 1000);
-            console.error(' Save operation error:', saveError);
+            console.error('❌ Save operation error:', saveError);
             console.error(`🕐 Save operation failed after ${elapsed} seconds`);
+            console.error('Error details:', {
+              message: saveError?.message,
+              stack: saveError?.stack,
+              code: saveError?.code
+            });
             throw saveError;
           }
         } catch (err: any) {

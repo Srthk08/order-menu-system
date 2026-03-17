@@ -720,20 +720,56 @@ const { title, description = "DevExpress - 24 Hour Delivery" } = Astro.props;
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
     <!-- Supabase Client -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2" onerror="
+      console.warn('⚠️ Supabase failed to load from unpkg, trying jsDelivr...');
+      const fallback = document.createElement('script');
+      fallback.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+      fallback.onerror = function() {
+        console.error('❌ Supabase failed to load from all CDN sources');
+      };
+      document.head.appendChild(fallback);
+    "></script>
     <script>
       // Initialize Supabase client
       const supabaseUrl = 'https://lmrrdcaavwwletcjcpqv.supabase.co';
       const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ';
       
+      let retryCount = 0;
+      const maxRetries = 50; // Maximum 5 seconds (50 * 100ms)
+      
       // Wait for Supabase to load, then initialize
       function initSupabase() {
         if (typeof supabase !== 'undefined') {
-          window.supabase = supabase.createClient(supabaseUrl, supabaseKey);
-          console.log('✅ Supabase client initialized globally');
+          try {
+            window.supabase = supabase.createClient(supabaseUrl, supabaseKey, {
+              auth: {
+                autoRefreshToken: true,
+                persistSession: true,
+                detectSessionInUrl: true,
+                flowType: 'pkce'
+              }
+            });
+            console.log('✅ Supabase client initialized globally');
+            retryCount = 0; // Reset on success
+          } catch (error) {
+            console.error('❌ Error creating Supabase client:', error);
+            if (retryCount < maxRetries) {
+              retryCount++;
+              setTimeout(initSupabase, 100);
+            } else {
+              console.error('❌ Failed to initialize Supabase after maximum retries');
+            }
+          }
         } else {
-          console.log('⏳ Supabase library not loaded yet, retrying...');
-          setTimeout(initSupabase, 100);
+          if (retryCount < maxRetries) {
+            retryCount++;
+            if (retryCount % 10 === 0) { // Only log every 10 retries to reduce spam
+              console.log('⏳ Supabase library not loaded yet, retrying... (' + retryCount + '/' + maxRetries + ')');
+            }
+            setTimeout(initSupabase, 100);
+          } else {
+            console.error('❌ Supabase library failed to load after maximum retries. Please check your internet connection.');
+          }
         }
       }
       

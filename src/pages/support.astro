@@ -671,6 +671,12 @@ import AuthGuard from '../components/AuthGuard.astro';
           `;
         }
 
+        const fullDesc = (ticket.description || '').toString();
+        const maxDescLen = 160;
+        const shortDesc = fullDesc.length > maxDescLen 
+          ? fullDesc.substring(0, maxDescLen) + '...' 
+          : fullDesc;
+
         return `
           <div class="border border-gray-200 rounded-lg p-3 sm:p-4 overflow-hidden">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
@@ -686,13 +692,29 @@ import AuthGuard from '../components/AuthGuard.astro';
             </div>
             
             <h4 class="font-semibold text-gray-900 mb-2 break-words overflow-wrap-anywhere">${ticket.subject}</h4>
-            <p class="text-gray-600 text-sm mb-2 break-words overflow-wrap-anywhere">${ticket.description.length > 100 ? ticket.description.substring(0, 100) + '...' : ticket.description}</p>
+            <p 
+              id="ticket-desc-${ticket.id}" 
+              class="text-gray-600 text-sm mb-2 break-words overflow-wrap-anywhere"
+              data-full-text="${fullDesc.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
+              data-short-text="${shortDesc.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
+              data-expanded="false"
+            >
+              ${shortDesc}
+            </p>
+            ${fullDesc.length > maxDescLen ? `
+              <button 
+                class="text-blue-600 hover:text-blue-800 text-xs font-medium mb-2"
+                onclick="toggleTicketDescription('ticket-desc-${ticket.id}', this)"
+              >
+                See more
+              </button>
+            ` : ''}
             <p class="text-gray-500 text-xs mb-2 break-words overflow-wrap-anywhere">Email: ${ticket.user_email || ticket.customer_email || 'Not provided'}</p>
             <p class="text-gray-400 text-xs mb-3 break-words overflow-wrap-anywhere">Ticket #: ${ticket.ticket_number}</p>
             
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mt-3 gap-2">
               <button 
-                onclick="viewTicketDetails('${ticket.id}')" 
+                onclick="viewTicketDetails('${ticket.id}', this)" 
                 class="text-blue-600 hover:text-blue-800 text-sm font-medium self-start"
               >
                 View Details
@@ -752,16 +774,41 @@ import AuthGuard from '../components/AuthGuard.astro';
     return colors[status] || 'bg-gray-100 text-gray-800';
   }
 
+  // Toggle long/short description in ticket cards
+  function toggleTicketDescription(elementId, button) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const expanded = el.getAttribute('data-expanded') === 'true';
+    const fullText = el.getAttribute('data-full-text') || '';
+    const shortText = el.getAttribute('data-short-text') || '';
+
+    if (!expanded) {
+      el.textContent = fullText;
+      el.setAttribute('data-expanded', 'true');
+      if (button) button.textContent = 'See less';
+    } else {
+      el.textContent = shortText;
+      el.setAttribute('data-expanded', 'false');
+      if (button) button.textContent = 'See more';
+    }
+  }
+
   // View ticket details function
-  function viewTicketDetails(ticketId) {
+  function viewTicketDetails(ticketId, button) {
     const detailsDiv = document.getElementById(`ticket-details-${ticketId}`);
     if (detailsDiv) {
       if (detailsDiv.classList.contains('hidden')) {
         detailsDiv.classList.remove('hidden');
         detailsDiv.style.display = 'block';
+        if (button) {
+          button.textContent = 'Hide Details';
+        }
       } else {
         detailsDiv.classList.add('hidden');
         detailsDiv.style.display = 'none';
+        if (button) {
+          button.textContent = 'View Details';
+        }
       }
     }
   }
@@ -788,6 +835,7 @@ import AuthGuard from '../components/AuthGuard.astro';
   window.closeTicketModal = closeTicketModal;
   window.closeMyTicketsModal = closeMyTicketsModal;
   window.viewTicketDetails = viewTicketDetails;
+  window.toggleTicketDescription = toggleTicketDescription;
 
   // Set up form event listeners
   function setupFormEventListeners() {

@@ -282,17 +282,17 @@ import AuthGuard from '../components/AuthGuard.astro';
 </style>
 
 <script>
-  // Import supabase in the script section
+  // Import Supabase client (handles auth + API key headers)
   import { supabase } from '../lib/supabase';
 
   // Using global authentication manager and Supabase for permanent updates
 
-  // Function to populate form with user data
-  function populateUserData() {
+  // Function to populate form with user data (from Supabase + local auth)
+  async function populateUserData() {
     console.log('populateUserData called');
     
-    // First, try to get user data from global auth manager
-    let userData = null;
+    // First, try to get user data from global auth manager / local caches
+    let userData: any = null;
     
     try {
       const authManager = window.globalAuthManager || window.simpleAuthManager;
@@ -335,10 +335,40 @@ import AuthGuard from '../components/AuthGuard.astro';
         console.error('Error reading localStorage:', e);
       }
     }
+
+    // CRITICAL: Fetch canonical profile from Supabase (auth + profiles table)
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || !user.id) {
+        console.warn('No Supabase auth user while populating profile:', authError?.message);
+      } else {
+        console.log('Supabase auth user:', user.email);
+        
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (!error && profile) {
+          console.log('Loaded profile from Supabase:', profile);
+          // Merge Supabase profile on top of any local userData
+          userData = {
+            ...(userData || {}),
+            ...profile,
+            email: user.email // always trust Supabase email
+          };
+        } else if (error) {
+          console.warn('Could not load profile from Supabase:', error.message);
+        }
+      }
+    } catch (supabaseError) {
+      console.error('Error fetching profile from Supabase:', supabaseError);
+    }
     
-    // Now populate the form with whatever data we have
+    // Now populate the form with final merged userData (Supabase as source of truth)
     if (userData) {
-      console.log('Populating form with user data:', userData);
+      console.log('Populating form with final user data:', userData);
       
       const fullNameInput = document.getElementById('full_name') as HTMLInputElement;
       const emailInput = document.getElementById('email') as HTMLInputElement;
@@ -652,15 +682,18 @@ import AuthGuard from '../components/AuthGuard.astro';
     `;
 
     try {
-      // Get current user
-      const authManager = window.globalAuthManager || window.simpleAuthManager;
-      const currentUser = authManager?.getCurrentUser();
-      if (!currentUser) {
-        showError('User not authenticated');
+      // Get current Supabase auth user (source of truth for id/email)
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || !user.id) {
+        console.error('Supabase auth error while updating profile:', authError);
+        showError('User not authenticated. Please log in again.');
         updateBtn.disabled = false;
         updateBtn.innerHTML = originalButtonText;
         return;
       }
+
+      const authManager = window.globalAuthManager || window.simpleAuthManager;
+      const currentUser = authManager?.getCurrentUser() || { id: user.id, email: user.email };
 
       // Format phone number with country code
       const formattedPhone = phone && phone.trim() ? `${countryCode}${phone.replace(/\D/g, '')}` : null;
@@ -673,7 +706,18 @@ import AuthGuard from '../components/AuthGuard.astro';
         updated_at: new Date().toISOString()
       };
 
-      // Update sessionStorage immediately for instant feedback (no database call)
+      // 1) Update Supabase profiles table (single awaited call – source of truth)
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', user.id);
+
+      if (dbError) {
+        console.error('Supabase update error:', dbError);
+        throw new Error(dbError.message || 'Database update failed');
+      }
+
+      // 2) Update session/local storage for instant feedback AFTER DB success
       try {
         const sessionData = sessionStorage.getItem('simple-auth-session');
         if (sessionData) {
@@ -683,11 +727,10 @@ import AuthGuard from '../components/AuthGuard.astro';
             session.user.phone = formattedPhone || undefined;
             session.user.company_name = companyName.trim() || undefined;
             sessionStorage.setItem('simple-auth-session', JSON.stringify(session));
-            console.log('✅ Profile updated in sessionStorage (instant)');
+            console.log('✅ Profile updated in sessionStorage');
           }
         }
         
-        // Also update localStorage for persistence
         const userData = {
           ...currentUser,
           full_name: fullName.trim(),
@@ -695,22 +738,18 @@ import AuthGuard from '../components/AuthGuard.astro';
           company_name: companyName.trim() || undefined
         };
         localStorage.setItem('simple-auth-user', JSON.stringify(userData));
-        console.log('✅ Profile updated in localStorage (instant)');
+        console.log('✅ Profile updated in localStorage');
       } catch (localError) {
-        console.warn('⚠️ SessionStorage update warning (non-critical):', localError);
+        console.warn('⚠️ Session/local storage update warning (non-critical):', localError);
       }
 
-      // Update auth manager local state (synchronous, no database call)
+      // 3) Update auth manager local state so header/dashboard etc. see new data
       if (authManager) {
-        // Update the auth manager's current user data directly
         if (authManager.currentUser) {
           authManager.currentUser.full_name = fullName.trim();
           authManager.currentUser.phone = formattedPhone || undefined;
           authManager.currentUser.company_name = companyName.trim() || undefined;
-          console.log('✅ Auth manager currentUser updated');
         }
-        
-        // Also trigger handleLogin to refresh the auth manager state
         if (typeof authManager.handleLogin === 'function') {
           const updatedUser = {
             ...currentUser,
@@ -719,34 +758,10 @@ import AuthGuard from '../components/AuthGuard.astro';
             company_name: companyName.trim() || undefined
           };
           authManager.handleLogin(updatedUser);
-          console.log('✅ Auth manager state refreshed via handleLogin');
-        } else if (typeof authManager.updateProfile === 'function') {
-          try {
-            // Check if updateProfile is async - if so, don't await it
-            const profileUpdate = authManager.updateProfile({
-              full_name: fullName.trim(),
-              phone: formattedPhone || undefined,
-              company_name: companyName.trim() || undefined
-            });
-            // If it returns a promise, handle it in background
-            if (profileUpdate && typeof profileUpdate.then === 'function') {
-              profileUpdate.catch(err => console.warn('Background profile update warning:', err));
-            }
-            console.log('✅ Profile updated in auth manager (instant)');
-          } catch (localError) {
-            console.warn('⚠️ Auth manager update warning (non-critical):', localError);
-          }
         }
       }
 
-      // Update profile in Supabase (optimized - no select, just update)
-      // Run in background after showing success
-      const supabaseUpdate = supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', currentUser.id);
-
-      // Show success immediately (optimistic update)
+      // 4) Show success (DB and local both updated)
       showSuccess('Profile updated successfully!');
       
       // Hide any previous error messages
@@ -755,31 +770,12 @@ import AuthGuard from '../components/AuthGuard.astro';
         errorMessage.classList.add('hidden');
       }
 
-      // Reset button state immediately
+      // Reset button state
       updateBtn.disabled = false;
       updateBtn.innerHTML = originalButtonText;
 
-      // Dispatch auth state change event
+      // Dispatch auth state change event so other components refresh user info
       window.dispatchEvent(new CustomEvent('auth-state-changed'));
-
-      // Complete database update in background (non-blocking)
-      supabaseUpdate.then(({ error }) => {
-        if (error) {
-          console.error('Supabase update error (background):', error);
-          // Show a subtle error notification without disrupting user
-          const errorMsg = document.getElementById('error-message');
-          const errorText = document.getElementById('error-text');
-          if (errorMsg && errorText) {
-            errorText.textContent = 'Profile saved locally. Database sync failed - changes will sync on next login.';
-            errorMsg.classList.remove('hidden');
-            setTimeout(() => errorMsg.classList.add('hidden'), 5000);
-          }
-        } else {
-          console.log('✅ Profile synced to database successfully');
-        }
-      }).catch(err => {
-        console.error('Background sync error:', err);
-      });
       
     } catch (error: any) {
       console.error('Profile update error:', error);

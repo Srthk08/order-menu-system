@@ -354,7 +354,7 @@ import Layout from '../layouts/Layout.astro';
 </style>
 
 <script>
-  import { supabase } from '../lib/supabase';
+  import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 
   const form = document.getElementById('signup-form') as HTMLFormElement;
   const errorMessage = document.getElementById('error-message');
@@ -392,22 +392,64 @@ import Layout from '../layouts/Layout.astro';
   // Handle Google authentication
   async function handleGoogleAuth() {
     oauthGoogleStarted = true;
-    // Persist intent across redirects
+    // Store the current origin to validate callback
+    const currentOrigin = window.location.origin;
+    const currentPath = window.location.pathname;
+    
+    // Persist intent and origin across redirects
     sessionStorage.setItem('oauth-google', '1');
+    sessionStorage.setItem('oauth-origin', currentOrigin);
+    sessionStorage.setItem('oauth-path', currentPath);
+    
+    console.log('🔐 Starting Google OAuth from:', currentOrigin, currentPath);
+    
     try {
       showStatus('Connecting to Google...', 'loading');
       
-      // Use the standard Supabase redirect URI
+      // Use the standard Supabase redirect URI - ensure it's the current origin
+      const redirectUrl = `${currentOrigin}/auth/callback`;
+      console.log('🔗 OAuth redirect URL:', redirectUrl);
+      
+      // Store redirect URL in multiple places to ensure we can recover it
+      sessionStorage.setItem('oauth-redirect-url', redirectUrl);
+      localStorage.setItem('oauth-redirect-url', redirectUrl);
+      
+      // Ensure PKCE state is preserved by using the same storage
+      console.log('🔐 Starting Google OAuth with PKCE...');
+      console.log('📍 Redirect URL:', redirectUrl);
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-          }
+            // Force the redirect URL in query params as well
+            redirect_to: redirectUrl
+          },
+          // Ensure PKCE flow is used
+          flowType: 'pkce',
+          // Don't skip browser redirect - let Supabase handle it
+          skipBrowserRedirect: false
         }
       });
+      
+      // If Supabase returns a URL, intercept and validate it
+      if (data?.url) {
+        console.log('🔗 Supabase returned OAuth URL:', data.url);
+        // Parse the URL to check redirect_to parameter
+        const urlObj = new URL(data.url);
+        const redirectParam = urlObj.searchParams.get('redirect_to');
+        if (redirectParam && redirectParam !== redirectUrl) {
+          console.warn('⚠️ Redirect URL mismatch! Supabase returned:', redirectParam, 'Expected:', redirectUrl);
+          // Force the correct redirect URL
+          urlObj.searchParams.set('redirect_to', redirectUrl);
+          // Update the URL
+          window.location.href = urlObj.toString();
+          return;
+        }
+      }
 
       if (error) {
         console.error('Google auth error:', error);
@@ -935,22 +977,73 @@ import Layout from '../layouts/Layout.astro';
       }
       
       console.log('Final validation passed, proceeding to Supabase signup');
+      console.log('Supabase URL:', supabaseUrl);
+      console.log('Supabase client initialized:', !!supabase);
+      
+      // Test Supabase connection first
+      try {
+        console.log('Testing Supabase connection...');
+        // Try a simple health check by getting the auth URL
+        const testResponse = await fetch(`${supabaseUrl}/rest/v1/`, {
+          method: 'HEAD',
+          headers: {
+            'apikey': supabaseAnonKey,
+          }
+        }).catch(() => null);
+        
+        if (!testResponse) {
+          throw new Error('Cannot connect to Supabase server. Please check your internet connection and verify the Supabase project is active.');
+        }
+        console.log('✅ Supabase connection test passed');
+      } catch (connectionError: any) {
+        console.error('❌ Supabase connection test failed:', connectionError);
+        if (connectionError.message?.includes('Failed to fetch') || 
+            connectionError.message?.includes('ERR_NAME_NOT_RESOLVED') ||
+            connectionError.message?.includes('Non-existent domain')) {
+          throw new Error('Cannot connect to Supabase server. The Supabase project URL may be incorrect or the project may have been deleted. Please contact support.');
+        }
+        throw connectionError;
+      }
       
       // Sign up with Supabase directly
-      const { data, error } = await supabase.auth.signUp({
-        email: validatedEmail,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            phone: phone ? `${countryCode}${phone.replace(/\D/g, '')}` : '',
-            company_name: companyName,
+      let data, error;
+      try {
+        console.log('Calling supabase.auth.signUp...');
+        const result = await supabase.auth.signUp({
+          email: validatedEmail,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              phone: phone ? `${countryCode}${phone.replace(/\D/g, '')}` : '',
+              company_name: companyName,
+            }
           }
+        });
+        data = result.data;
+        error = result.error;
+      } catch (networkError: any) {
+        console.error('Network error during signup:', networkError);
+        // Check if it's a network/fetch error
+        if (networkError?.message?.includes('Failed to fetch') || 
+            networkError?.message?.includes('NetworkError') ||
+            networkError?.name === 'TypeError' ||
+            networkError?.toString().includes('fetch')) {
+          throw new Error('Network error: Unable to connect to the authentication server. Please check your internet connection and try again. If the problem persists, the service may be temporarily unavailable.');
         }
-      });
+        throw networkError;
+      }
 
       if (error) {
         console.error('Supabase signup error:', error);
+        // Provide user-friendly error messages
+        if (error.message?.includes('User already registered') || error.message?.includes('already exists')) {
+          throw new Error('An account with this email already exists. Please sign in instead.');
+        } else if (error.message?.includes('Password')) {
+          throw new Error('Password error: ' + error.message);
+        } else if (error.message?.includes('Email')) {
+          throw new Error('Email error: ' + error.message);
+        }
         throw error;
       }
 
@@ -1220,12 +1313,29 @@ import Layout from '../layouts/Layout.astro';
       } else {
         throw new Error('Account creation failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Signup error:', error);
+      
+      // Determine error message based on error type
+      let errorMessageText = 'An error occurred during account creation.';
+      
+      if (error?.message) {
+        errorMessageText = error.message;
+      } else if (error?.toString().includes('Failed to fetch') || error?.toString().includes('NetworkError')) {
+        errorMessageText = 'Network error: Unable to connect to the server. Please check your internet connection and try again.';
+      } else if (error?.code === 'PGRST301' || error?.message?.includes('JWT')) {
+        errorMessageText = 'Authentication error: Invalid configuration. Please contact support.';
+      } else if (error?.message?.includes('User already registered')) {
+        errorMessageText = 'An account with this email already exists. Please sign in instead.';
+      } else if (error?.message?.includes('Password')) {
+        errorMessageText = 'Password error: ' + error.message;
+      } else if (typeof error === 'string') {
+        errorMessageText = error;
+      }
       
       // Show error message
       if (errorText) {
-        errorText.textContent = error.message || 'An error occurred during account creation.';
+        errorText.textContent = errorMessageText;
       }
       if (errorMessage) {
         errorMessage.classList.remove('hidden');

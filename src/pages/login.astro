@@ -221,6 +221,28 @@ import Layout from '../layouts/Layout.astro';
   const form = document.getElementById('login-form') as HTMLFormElement;
   const errorMessage = document.getElementById('error-message');
   const errorText = document.getElementById('error-text');
+  
+  // Check for error in URL parameters (from OAuth callback redirects)
+  const urlParams = new URLSearchParams(window.location.search);
+  const errorParam = urlParams.get('error');
+  const errorType = urlParams.get('type');
+  
+  if (errorParam) {
+    console.log('Error from URL:', errorParam, 'Type:', errorType);
+    if (errorText) {
+      // Show more helpful messages for connection errors
+      if (errorType === 'connection' || errorParam.includes('Supabase') || errorParam.includes('connection')) {
+        errorText.textContent = errorParam + ' Please check your Supabase project configuration.';
+      } else {
+        errorText.textContent = errorParam;
+      }
+    }
+    if (errorMessage) {
+      errorMessage.classList.remove('hidden');
+    }
+    // Clear the error from URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
   const successMessage = document.getElementById('success-message');
   const successText = document.getElementById('success-text');
   const googleSigninBtn = document.getElementById('google-signin-btn');
@@ -248,22 +270,64 @@ import Layout from '../layouts/Layout.astro';
   // Handle Google authentication
   async function handleGoogleAuth() {
     oauthGoogleStarted = true;
-    // Persist intent across redirect/callback
+    // Store the current origin to validate callback
+    const currentOrigin = window.location.origin;
+    const currentPath = window.location.pathname;
+    
+    // Persist intent and origin across redirects
     sessionStorage.setItem('oauth-google', '1');
+    sessionStorage.setItem('oauth-origin', currentOrigin);
+    sessionStorage.setItem('oauth-path', currentPath);
+    
+    console.log('🔐 Starting Google OAuth from:', currentOrigin, currentPath);
+    
     try {
       showStatus('Connecting to Google...', 'loading');
       
-      // Use the standard Supabase redirect URI
+      // Use the standard Supabase redirect URI - ensure it's the current origin
+      const redirectUrl = `${currentOrigin}/auth/callback`;
+      console.log('🔗 OAuth redirect URL:', redirectUrl);
+      
+      // Store redirect URL in multiple places to ensure we can recover it
+      sessionStorage.setItem('oauth-redirect-url', redirectUrl);
+      localStorage.setItem('oauth-redirect-url', redirectUrl);
+      
+      // Ensure PKCE state is preserved by using the same storage
+      console.log('🔐 Starting Google OAuth with PKCE...');
+      console.log('📍 Redirect URL:', redirectUrl);
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-          }
+            // Force the redirect URL in query params as well
+            redirect_to: redirectUrl
+          },
+          // Ensure PKCE flow is used
+          flowType: 'pkce',
+          // Don't skip browser redirect - let Supabase handle it
+          skipBrowserRedirect: false
         }
       });
+      
+      // If Supabase returns a URL, intercept and validate it
+      if (data?.url) {
+        console.log('🔗 Supabase returned OAuth URL:', data.url);
+        // Parse the URL to check redirect_to parameter
+        const urlObj = new URL(data.url);
+        const redirectParam = urlObj.searchParams.get('redirect_to');
+        if (redirectParam && redirectParam !== redirectUrl) {
+          console.warn('⚠️ Redirect URL mismatch! Supabase returned:', redirectParam, 'Expected:', redirectUrl);
+          // Force the correct redirect URL
+          urlObj.searchParams.set('redirect_to', redirectUrl);
+          // Update the URL
+          window.location.href = urlObj.toString();
+          return;
+        }
+      }
 
       if (error) {
         console.error('Google auth error:', error);
@@ -339,9 +403,14 @@ import Layout from '../layouts/Layout.astro';
         await syncGoogleUser(user);
         showStatus('Successfully signed in with Google!', 'success');
         
-        // Redirect to dashboard
+        // Redirect to dashboard - use absolute URL to ensure correct origin
+        const dashboardUrl = `${window.location.origin}/dashboard`;
+        console.log('✅ Google sign-in success, redirecting to:', dashboardUrl);
+        // Clear OAuth origin after successful auth
+        sessionStorage.removeItem('oauth-origin');
+        sessionStorage.removeItem('oauth-path');
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = dashboardUrl;
         }, 1500);
       }
     }

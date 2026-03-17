@@ -633,7 +633,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
 
 </Layout>
 
-<script>
+<script type="module">
   console.log('🚀 Cart page script loaded');
   
   // Import required modules
@@ -913,37 +913,39 @@ import { sharedDataStore } from '../lib/shared-data-store';
             this.clearUserCartFromLocalStorage(currentUser.email);
             return;
           } else if (cartData && cartData.length > 0) {
-            console.log('✅ Loaded cart from Supabase:', cartData);
-            console.log('📊 Cart data details:', {
+            console.log('Loaded cart from Supabase:', cartData);
+            console.log('Cart data details:', {
               count: cartData.length,
               firstItem: cartData[0],
               basePrice: cartData[0]?.base_price,
               productName: cartData[0]?.product_name
             });
             // Convert Supabase data back to cart items format
-            this.items = cartData.map(item => ({
-              id: item.product_id,
-              name: item.product_name,
-              description: item.product_description,
-              price: item.base_price,
-              quantity: 1,
-              customName: item.custom_name || '',
-              restaurantName: item.restaurant_name_customization || '',
-              color: item.selected_color || '#3B82F6',
-              features: item.selected_features || [],
-              projectName: item.project_name || '',
-              contactPerson: item.contact_person || '',
-              cuisineType: item.cuisine_type || '',
-              appName: item.app_name || '',
-              productDescription: item.product_description_custom || '',
-              email: item.contact_email || currentUser.email,
-              phone: item.contact_phone || '',
-              primaryColor: item.primary_color || '#3B82F6',
-              secondaryColor: item.secondary_color || '#A5CF6',
-              accentColor: item.accent_color || '#F59E0B',
-              textColor: item.text_color || '#1F2937',
-              additionalRequirements: item.additional_requirements || ''
-            }));
+            this.items = cartData.map((item: any) => {
+              return {
+                id: item.product_id,
+                name: item.product_name,
+                description: item.product_description,
+                price: item.base_price,
+                quantity: 1,
+                customName: item.custom_name || '',
+                restaurantName: item.restaurant_name_customization || '',
+                color: item.selected_color || '#3B82F6',
+                features: item.selected_features || [],
+                projectName: item.project_name || '',
+                contactPerson: item.contact_person || '',
+                cuisineType: item.cuisine_type || '',
+                appName: item.app_name || '',
+                productDescription: item.product_description_custom || '',
+                email: item.contact_email || currentUser.email,
+                phone: item.contact_phone || '',
+                primaryColor: item.primary_color || '#3B82F6',
+                secondaryColor: item.secondary_color || '#A5CF66',
+                accentColor: item.accent_color || '#F59E0B',
+                textColor: item.text_color || '#1F2937',
+                additionalRequirements: item.additional_requirements || ''
+              };
+            });
             
             console.log('🔄 Mapped cart items:', this.items);
             console.log('💰 First item price:', this.items[0]?.price);
@@ -1488,7 +1490,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
       const projectRequirements = document.getElementById('project-requirements');
       
       if (cartActions) cartActions.classList.add('hidden');
-      if (projectRequirements) projectRequirements.classList.remove('hidden');
+      if (projectRequirements) (projectRequirements as HTMLElement).classList.remove('hidden');
       
       // Pre-fill form with user data if logged in
       this.prefillRequirementsForm();
@@ -1506,7 +1508,11 @@ import { sharedDataStore } from '../lib/shared-data-store';
     async submitRequirements() {
       console.log('🚀 submitRequirements function called!');
       
-      const submitBtn = document.getElementById('submit-requirements');
+      const submitBtn = document.getElementById('submit-requirements') as HTMLButtonElement | null;
+      if (!submitBtn) {
+        console.error('❌ Submit button not found');
+        return;
+      }
       const originalText = submitBtn.innerHTML;
       
       // Prevent duplicate submissions
@@ -1521,7 +1527,11 @@ import { sharedDataStore } from '../lib/shared-data-store';
         console.log('🚀 Starting submitRequirements...');
         
         // Validate requirements form - only check visible required fields
-        const form = document.getElementById('requirements-form');
+        const form = document.getElementById('requirements-form') as HTMLFormElement | null;
+        if (!form) {
+          console.error('❌ Requirements form not found');
+          return;
+        }
         const isOrderMenuSystem = this.items[0] && (this.items[0].id === 'order-menu-system' || this.items[0].id === '5');
         
         if (isOrderMenuSystem) {
@@ -1557,8 +1567,8 @@ import { sharedDataStore } from '../lib/shared-data-store';
             return;
           }
         } else {
-          // COMMENTED OUT: For other products, temporarily remove required from hidden fields before validation
-          /* const hiddenRequiredFields = form.querySelectorAll('#order-menu-fields [required], #restaurant-fields [required], #restaurant-cuisine-fields [required]');
+          // For other products, temporarily remove required from hidden fields before validation
+          const hiddenRequiredFields = form.querySelectorAll('#order-menu-fields [required], #restaurant-fields [required], #restaurant-cuisine-fields [required]');
           const originalRequiredStates = [];
           
           // Store original required states and remove required from hidden fields
@@ -1568,21 +1578,21 @@ import { sharedDataStore } from '../lib/shared-data-store';
           });
           
           // Validate form
-        if (!(form as HTMLFormElement).checkValidity()) {
-          console.log('❌ Form validation failed');
-          (form as HTMLFormElement).reportValidity();
+          if (!form.checkValidity()) {
+            console.log('❌ Form validation failed');
+            form.reportValidity();
             
             // Restore original required states
             hiddenRequiredFields.forEach((field, index) => {
               field.required = originalRequiredStates[index];
             });
-          return;
+            return;
           }
           
           // Restore original required states
           hiddenRequiredFields.forEach((field, index) => {
             field.required = originalRequiredStates[index];
-          }); */
+          });
         }
 
         console.log('✅ Form validation passed');
@@ -1617,24 +1627,21 @@ import { sharedDataStore } from '../lib/shared-data-store';
             country: (form.querySelector('[name="country"]') as HTMLInputElement)?.value || 'India',
             email: (form.querySelector('[name="email"]') as HTMLInputElement)?.value || '',
             phone: (form.querySelector('[name="phone"]') as HTMLInputElement)?.value || '',
-            additionalRequirements: (form.querySelector('[name="additionalRequirements"]') as HTMLTextAreaElement)?.value || '',
-            
-            
-            
+            additionalRequirements: (form.querySelector('[name="additionalRequirements"]') as HTMLTextAreaElement)?.value || ''
           };
         } else {
-          // COMMENTED OUT: Collect standard form data for other products
-          /* this.requirements = {
-          projectName: (form.querySelector('[name="projectName"]') as HTMLInputElement)?.value || '',
-          contactPerson: (form.querySelector('[name="contactPerson"]') as HTMLInputElement)?.value || '',
-          restaurantName: (form.querySelector('[name="restaurantName"]') as HTMLInputElement)?.value || '',
-          cuisineType: (form.querySelector('[name="cuisineType"]') as HTMLSelectElement)?.value || '',
-          appName: (form.querySelector('[name="appName"]') as HTMLInputElement)?.value || '',
-          productDescription: (form.querySelector('[name="productDescription"]') as HTMLTextAreaElement)?.value || '',
-          email: (form.querySelector('[name="email"]') as HTMLInputElement)?.value || '',
-          phone: (form.querySelector('[name="phone"]') as HTMLInputElement)?.value || '',
-          additionalRequirements: (form.querySelector('[name="additionalRequirements"]') as HTMLTextAreaElement)?.value || ''
-        }; */
+          // Collect standard form data for other products
+          this.requirements = {
+            projectName: (form.querySelector('[name="projectName"]') as HTMLInputElement)?.value || '',
+            contactPerson: (form.querySelector('[name="contactPerson"]') as HTMLInputElement)?.value || '',
+            restaurantName: (form.querySelector('[name="restaurantName"]') as HTMLInputElement)?.value || '',
+            cuisineType: (form.querySelector('[name="cuisineType"]') as HTMLSelectElement)?.value || '',
+            appName: (form.querySelector('[name="appName"]') as HTMLInputElement)?.value || '',
+            productDescription: (form.querySelector('[name="productDescription"]') as HTMLTextAreaElement)?.value || '',
+            email: (form.querySelector('[name="email"]') as HTMLInputElement)?.value || '',
+            phone: (form.querySelector('[name="phone"]') as HTMLInputElement)?.value || '',
+            additionalRequirements: (form.querySelector('[name="additionalRequirements"]') as HTMLTextAreaElement)?.value || ''
+          };
         }
 
         console.log('📝 Collected form data:', this.requirements);
@@ -1686,29 +1693,32 @@ import { sharedDataStore } from '../lib/shared-data-store';
         
         // Test if payment section is in DOM
         if (paymentSection) {
-          console.log('🔍 Payment section parent:', paymentSection.parentElement);
-          console.log('🔍 Payment section offsetHeight:', paymentSection.offsetHeight);
-          console.log('🔍 Payment section offsetWidth:', paymentSection.offsetWidth);
-          console.log('🔍 Payment section computed style display:', window.getComputedStyle(paymentSection).display);
+          const paymentEl: HTMLElement = paymentSection as HTMLElement;
+          console.log('🔍 Payment section parent:', paymentEl.parentElement);
+          console.log('🔍 Payment section offsetHeight:', paymentEl.offsetHeight);
+          console.log('🔍 Payment section offsetWidth:', paymentEl.offsetWidth);
+          const computedStyle = window.getComputedStyle(paymentEl);
+          console.log('🔍 Payment section computed style display:', computedStyle.display);
         }
         
         if (projectRequirements) {
-          projectRequirements.classList.add('hidden');
-          projectRequirements.style.display = 'none';
+          const projEl: HTMLElement = projectRequirements as HTMLElement;
+          projEl.classList.add('hidden');
+          projEl.style.display = 'none';
           console.log('✅ Hidden project requirements');
         }
         
         if (paymentSection) {
           // Remove hidden class and force visibility
-          paymentSection.classList.remove('hidden');
-          paymentSection.style.setProperty('display', 'block', 'important');
-          paymentSection.style.setProperty('visibility', 'visible', 'important');
-          paymentSection.style.setProperty('opacity', '1', 'important');
-          paymentSection.style.setProperty('position', 'relative', 'important');
-          paymentSection.style.setProperty('z-index', '999', 'important');
-          paymentSection.style.setProperty('height', 'auto', 'important');
-          paymentSection.style.setProperty('width', '100%', 'important');
-          paymentSection.style.setProperty('background-color', '#ffffff', 'important');
+          (paymentSection as HTMLElement).classList.remove('hidden');
+          (paymentSection as HTMLElement).style.setProperty('display', 'block', 'important');
+          (paymentSection as HTMLElement).style.setProperty('visibility', 'visible', 'important');
+          (paymentSection as HTMLElement).style.setProperty('opacity', '1', 'important');
+          (paymentSection as HTMLElement).style.setProperty('position', 'relative', 'important');
+          (paymentSection as HTMLElement).style.setProperty('z-index', '999', 'important');
+          (paymentSection as HTMLElement).style.setProperty('height', 'auto', 'important');
+          (paymentSection as HTMLElement).style.setProperty('width', '100%', 'important');
+          (paymentSection as HTMLElement).style.setProperty('background-color', '#ffffff', 'important');
           console.log('✅ Showed payment section with forced visibility');
           
           // Show loading state first
@@ -1741,9 +1751,9 @@ import { sharedDataStore } from '../lib/shared-data-store';
               console.log('🍽️ Order Menu System detected - payment link removed, showing payment section only.');
               paymentSection.scrollIntoView({ behavior: 'smooth' });
             } else {
-              // COMMENTED OUT: Scroll to payment section for other products
-              /* paymentSection.scrollIntoView({ behavior: 'smooth' });
-              console.log('✅ Scrolled to payment page'); */
+              // Scroll to payment section for other products
+              paymentSection.scrollIntoView({ behavior: 'smooth' });
+              console.log('✅ Scrolled to payment page');
             }
           }, 500);
           
@@ -1780,8 +1790,8 @@ import { sharedDataStore } from '../lib/shared-data-store';
         const paymentSection = document.getElementById('payment-section');
         
         if (projectRequirements) {
-          projectRequirements.classList.add('hidden');
-          projectRequirements.style.display = 'none';
+          (projectRequirements as HTMLElement).classList.add('hidden');
+          (projectRequirements as HTMLElement).style.display = 'none';
         }
         
         if (paymentSection) {
@@ -2015,12 +2025,12 @@ import { sharedDataStore } from '../lib/shared-data-store';
         if (restaurantFields) restaurantFields.classList.add('hidden');
         if (restaurantCuisineFields) restaurantCuisineFields.classList.add('hidden');
         
-        // COMMENTED OUT: Show App Screenshots and App Icon sections for other products
-        /* const nonOrderMenuFieldsForOther = document.querySelectorAll('.non-order-menu-fields');
+        // Show App Screenshots and App Icon sections for other products
+        const nonOrderMenuFieldsForOther = document.querySelectorAll('.non-order-menu-fields');
         nonOrderMenuFieldsForOther.forEach(field => {
           field.classList.remove('hidden');
           field.style.display = 'block';
-        }); */
+        });
         
       } else {
         console.log('📱 Showing non-restaurant fields for product:', item.id);
@@ -2090,11 +2100,11 @@ import { sharedDataStore } from '../lib/shared-data-store';
           if (photosLabel) photosLabel.textContent = 'App Screenshots (Optional)';
           if (photosText) photosText.textContent = 'Upload app screenshots or drag and drop';
         } else {
-          // COMMENTED OUT: Default for other products
-          /* if (uploadLabel) uploadLabel.textContent = 'App Icon';
+          // Default for other products
+        if (uploadLabel) uploadLabel.textContent = 'App Icon';
         if (uploadText) uploadText.textContent = 'Upload app icon or drag and drop';
         if (photosLabel) photosLabel.textContent = 'App Screenshots (Optional)';
-        if (photosText) photosText.textContent = 'Upload app screenshots or drag and drop'; */
+        if (photosText) photosText.textContent = 'Upload app screenshots or drag and drop';
       }
       }
 
@@ -2248,7 +2258,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
       const projectRequirements = document.getElementById('project-requirements');
       const cartActions = document.getElementById('cart-actions');
       
-      if (projectRequirements) projectRequirements.classList.add('hidden');
+      if (projectRequirements) (projectRequirements as HTMLElement).classList.add('hidden');
       if (cartActions) cartActions.classList.remove('hidden');
       
       // Scroll to cart actions
@@ -2327,8 +2337,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
             
             console.log('🍽️ Form data collected for Order Menu System:', formData);
           } else {
-            // COMMENTED OUT: Standard form data for other products
-            /* formData = {
+
             projectName: form.querySelector('[name="projectName"]')?.value || '',
             contactPerson: form.querySelector('[name="contactPerson"]')?.value || '',
             restaurantName: form.querySelector('[name="restaurantName"]')?.value || '',
@@ -2337,7 +2346,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
             email: form.querySelector('[name="email"]')?.value || '',
             phone: form.querySelector('[name="phone"]')?.value || '',
             additionalRequirements: form.querySelector('[name="additionalRequirements"]')?.value || ''
-          }; */
+
           }
         }
 
@@ -2469,8 +2478,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
             cart_status: 'pending'
           };
         } else {
-          // COMMENTED OUT: Standard cart data for other products
-          /* cartData = {
+
           user_email: currentUser.email,
           user_id: currentUser.id || null,
           product_id: item.id,
@@ -2507,7 +2515,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
           additional_requirements: formData.additionalRequirements || '',
             cart_status: 'pending',
           is_checkout_initiated: false
-        }; */
+
         }
 
         console.log('🔍 Debug - Cart data being sent to Supabase:', cartData);
@@ -2878,8 +2886,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
           if (contactPhoneEl) contactPhoneEl.textContent = this.requirements.phone || '-';
           
         } else {
-          // COMMENTED OUT: Hide Order Menu System review section for other products
-          /* const orderMenuInfoEl = document.getElementById('review-order-menu-info');
+
           if (orderMenuInfoEl) orderMenuInfoEl.classList.add('hidden');
           // Update standard project summary for other products
         const projectNameEl = document.getElementById('review-project-name');
@@ -2904,7 +2911,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
       } else {
           if (restaurantInfoEl) restaurantInfoEl.classList.add('hidden');
           if (cuisineInfoEl) cuisineInfoEl.classList.add('hidden');
-          } */
+          }
       }
 
       // Update colors
@@ -2972,7 +2979,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
       const projectRequirements = document.getElementById('project-requirements');
       
       if (orderReview) orderReview.classList.add('hidden');
-      if (projectRequirements) projectRequirements.classList.remove('hidden');
+      if (projectRequirements) (projectRequirements as HTMLElement).classList.remove('hidden');
       
       projectRequirements?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -2990,7 +2997,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
       const projectRequirements = document.getElementById('project-requirements');
       const paymentSection = document.getElementById('payment-section');
       
-      if (projectRequirements) projectRequirements.classList.add('hidden');
+      if (projectRequirements) (projectRequirements as HTMLElement).classList.add('hidden');
       if (paymentSection) paymentSection.classList.remove('hidden');
       
       // Update payment summary
@@ -3294,8 +3301,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
             additionalRequirements: form.querySelector('[name="additionalRequirements"]')?.value || ''
           };
         } else {
-          // COMMENTED OUT: Standard form data for other products
-          /* formData = {
+
             projectName: form.querySelector('[name="projectName"]')?.value || '',
             contactPerson: form.querySelector('[name="contactPerson"]')?.value || '',
             restaurantName: form.querySelector('[name="restaurantName"]')?.value || '',
@@ -3305,7 +3311,7 @@ import { sharedDataStore } from '../lib/shared-data-store';
             email: form.querySelector('[name="email"]')?.value || '',
             phone: form.querySelector('[name="phone"]')?.value || '',
             additionalRequirements: form.querySelector('[name="additionalRequirements"]')?.value || ''
-          }; */
+
         }
         }
 

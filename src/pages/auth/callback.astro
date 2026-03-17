@@ -26,6 +26,63 @@ try {
 ---
 
 <Layout title="Authentication Callback">
+  <!-- IMMEDIATE REDIRECT CHECK - Runs before any other scripts -->
+  <script is:inline>
+    (function() {
+      'use strict';
+      try {
+        const hostname = window.location.hostname;
+        const origin = window.location.origin;
+        const pathname = window.location.pathname;
+        
+        // Check if we're on a 24hour project
+        const is24HourProject = hostname.includes('24hour') || 
+                               hostname.includes('24-hour') || 
+                               origin.includes('24hour') ||
+                               pathname.includes('24hour');
+        
+        // Get stored origin from sessionStorage or localStorage
+        const storedOrigin = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('oauth-origin')) ||
+                            (typeof localStorage !== 'undefined' && localStorage.getItem('oauth-origin'));
+        
+        console.log('🚨 IMMEDIATE CHECK (inline script):', {
+          hostname: hostname,
+          origin: origin,
+          is24HourProject: is24HourProject,
+          storedOrigin: storedOrigin,
+          shouldRedirect: is24HourProject || (storedOrigin && storedOrigin !== origin)
+        });
+        
+        // If we're on the wrong project, redirect immediately
+        if (is24HourProject) {
+          console.error('❌ WRONG PROJECT DETECTED (24hour)! Redirecting immediately...');
+          const correctOrigin = storedOrigin || 'http://localhost:4321';
+          const redirectPath = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('oauth-path')) || '/signup';
+          const currentSearch = window.location.search;
+          const currentHash = window.location.hash;
+          const redirectUrl = `${correctOrigin}/auth/callback${currentSearch}${currentHash}`;
+          console.log('🔄 Redirecting to:', redirectUrl);
+          window.location.replace(redirectUrl);
+          return;
+        }
+        
+        // If origin doesn't match stored origin, redirect
+        if (storedOrigin && storedOrigin !== origin) {
+          console.warn('⚠️ ORIGIN MISMATCH! Redirecting to stored origin...');
+          const redirectPath = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('oauth-path')) || '/signup';
+          const currentSearch = window.location.search;
+          const currentHash = window.location.hash;
+          const redirectUrl = `${storedOrigin}/auth/callback${currentSearch}${currentHash}`;
+          console.log('🔄 Redirecting to:', redirectUrl);
+          window.location.replace(redirectUrl);
+          return;
+        }
+      } catch (e) {
+        console.error('Error in immediate redirect check:', e);
+      }
+    })();
+  </script>
+  
   <main class="min-h-screen flex items-center justify-center bg-white">
     <div class="max-w-md w-full space-y-8">
       <div class="text-center">
@@ -97,11 +154,158 @@ try {
   const SUPABASE_URL = 'https://lmrrdcaavwwletcjcpqv.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ';
   
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Use the same Supabase client configuration as the rest of the app
+  // This ensures PKCE state is preserved
+  let supabase;
+  
+  // First, try to use the global Supabase client from Layout.astro (if available)
+  if (typeof window !== 'undefined' && window.supabase && window.supabase.auth) {
+    console.log('✅ Using global Supabase client');
+    supabase = window.supabase;
+  } else {
+    // Create a new client with the same config
+    console.log('⚠️ Creating new Supabase client (global not available)');
+    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+        storage: window.localStorage, // Ensure we use localStorage for PKCE state
+        storageKey: 'sb-auth-token' // Standard Supabase storage key
+      }
+    });
+  }
+
+  // Check Supabase connectivity first
+  (async function checkSupabaseConnection() {
+    try {
+      console.log('🔍 Checking Supabase connectivity...');
+      const testResponse = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+        method: 'HEAD',
+        headers: { 'apikey': SUPABASE_ANON_KEY },
+        signal: AbortSignal.timeout(3000) // 3 second timeout
+      });
+      console.log('✅ Supabase is reachable');
+    } catch (err) {
+      console.error('❌ Supabase connection failed:', err);
+      // Don't block, but log the error
+      if (err.name === 'TimeoutError' || err.message?.includes('Failed to fetch') || err.message?.includes('ERR_NAME_NOT_RESOLVED')) {
+        console.error('⚠️ Supabase URL may be incorrect or unreachable:', SUPABASE_URL);
+        // Show error to user after a delay
+        setTimeout(() => {
+          const errorMsg = 'Cannot connect to authentication server. Please check your internet connection.';
+          window.location.href = `/login?error=${encodeURIComponent(errorMsg)}`;
+        }, 2000);
+      }
+    }
+  })();
+
+  // IMMEDIATE CHECK: Detect if we're on the wrong project and redirect
+  (function() {
+    const storedOrigin = sessionStorage.getItem('oauth-origin') || localStorage.getItem('oauth-origin');
+    const currentOrigin = window.location.origin;
+    const hostname = window.location.hostname;
+    const pathname = window.location.pathname;
+    
+    // Check if we're on a 24hour project URL
+    const is24HourProject = hostname.includes('24hour') || 
+                           hostname.includes('24-hour') || 
+                           pathname.includes('24hour') ||
+                           currentOrigin.includes('24hour');
+    
+    // Check if we have a stored origin that's different
+    const originMismatch = storedOrigin && storedOrigin !== currentOrigin;
+    
+    console.log('🚨 IMMEDIATE CHECK - Callback validation:', {
+      storedOrigin: storedOrigin,
+      currentOrigin: currentOrigin,
+      hostname: hostname,
+      is24HourProject: is24HourProject,
+      originMismatch: originMismatch,
+      shouldRedirect: is24HourProject || originMismatch
+    });
+    
+    // If we're on the wrong project, redirect immediately
+    if (is24HourProject || (originMismatch && storedOrigin)) {
+      console.error('❌ WRONG PROJECT DETECTED! Redirecting immediately...');
+      const correctOrigin = storedOrigin || 'http://localhost:4321';
+      const redirectPath = sessionStorage.getItem('oauth-path') || '/signup';
+      // Preserve the OAuth code/tokens in the URL if present
+      const currentSearch = window.location.search;
+      const currentHash = window.location.hash;
+      const redirectUrl = `${correctOrigin}/auth/callback${currentSearch}${currentHash}`;
+      console.log('🔄 Redirecting to:', redirectUrl);
+      window.location.replace(redirectUrl);
+      return; // Stop execution
+    }
+  })();
 
   // Handle the OAuth callback
   async function handleAuthCallback() {
+    console.log('🚀 Starting OAuth callback handler...');
+    console.log('📍 Current URL:', window.location.href);
+    console.log('📍 Has hash:', !!window.location.hash);
+    console.log('📍 Has code param:', window.location.search.includes('code='));
+    
+    // Add timeout to prevent infinite waiting
+    const timeoutId = setTimeout(() => {
+      console.error('⏱️ Callback handler timeout - redirecting to login');
+      window.location.href = '/login?error=timeout';
+    }, 10000); // 10 second timeout
+    
     try {
+      // Validate we're on the correct origin
+      const storedOrigin = sessionStorage.getItem('oauth-origin') || localStorage.getItem('oauth-origin');
+      const storedRedirectUrl = sessionStorage.getItem('oauth-redirect-url') || localStorage.getItem('oauth-redirect-url');
+      const currentOrigin = window.location.origin;
+      
+      console.log('🔍 OAuth Callback - Origin validation:', {
+        stored: storedOrigin,
+        current: currentOrigin,
+        match: storedOrigin === currentOrigin,
+        hostname: window.location.hostname,
+        port: window.location.port,
+        fullUrl: window.location.href,
+        storedRedirectUrl: storedRedirectUrl
+      });
+      
+      // Check if we're on the wrong project (24hour project)
+      const hostname = window.location.hostname;
+      const isWrongProject = hostname.includes('24hour') || 
+                            hostname.includes('24-hour') || 
+                            (storedOrigin && !currentOrigin.includes(hostname) && hostname !== 'localhost' && hostname !== '127.0.0.1');
+      
+      // If origin doesn't match OR we're on the wrong project, redirect to the correct origin
+      if ((storedOrigin && storedOrigin !== currentOrigin) || isWrongProject) {
+        console.warn('⚠️ Origin/project mismatch detected!', {
+          expected: storedOrigin,
+          actual: currentOrigin,
+          isWrongProject: isWrongProject,
+          action: 'Redirecting to correct origin...'
+        });
+        const storedPath = sessionStorage.getItem('oauth-path') || '/signup';
+        const correctOrigin = storedOrigin || currentOrigin.replace(/24hour.*|24-hour.*/i, 'localhost:4321');
+        // Use replace to prevent back button issues
+        window.location.replace(`${correctOrigin}${storedPath}?error=origin_mismatch`);
+        return;
+      }
+      
+      // Additional validation: Ensure we're on localhost or the expected domain
+      // hostname is already declared above, reuse it
+      const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+      const isExpectedDomain = !storedOrigin || storedOrigin.includes(hostname);
+      
+      if (!isLocalhost && !isExpectedDomain) {
+        console.error('❌ Unexpected domain detected!', {
+          hostname: hostname,
+          storedOrigin: storedOrigin,
+          action: 'Redirecting to signup...'
+        });
+        window.location.replace('/signup?error=invalid_domain');
+        return;
+      }
+      
       // 1) If tokens are in the hash fragment (#access_token=...), set the session directly
       const hash = window.location.hash || '';
       if (hash.includes('access_token')) {
@@ -119,7 +323,12 @@ try {
         }
 
         if (access_token && refresh_token) {
-          const { data } = await supabase.auth.setSession({ access_token, refresh_token });
+          console.log('🔑 Hash tokens found - setting session...');
+          try {
+            const { data } = await Promise.race([
+              supabase.auth.setSession({ access_token, refresh_token }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+            ]);
 
           // Persist to sessionStorage so Header.astro/UI picks up Google email
           if (data?.session?.user) {
@@ -132,39 +341,152 @@ try {
             window.dispatchEvent(new CustomEvent('user-logged-in', { detail: data.session.user }));
           }
 
-          // Clean URL (remove hash) and go to dashboard
-          window.history.replaceState({}, document.title, '/auth/callback');
-          window.location.href = '/dashboard';
+            // Clean URL (remove hash) and go to dashboard
+            // Use absolute URL to ensure we stay on the same origin
+            // Double-check we're on the correct origin before redirecting
+            const storedOrigin = sessionStorage.getItem('oauth-origin') || localStorage.getItem('oauth-origin');
+            const finalOrigin = storedOrigin && storedOrigin !== window.location.origin ? storedOrigin : window.location.origin;
+            const dashboardUrl = `${finalOrigin}/dashboard`;
+            console.log('✅ OAuth success, redirecting to:', dashboardUrl, {
+              storedOrigin: storedOrigin,
+              currentOrigin: window.location.origin,
+              finalOrigin: finalOrigin
+            });
+            window.history.replaceState({}, document.title, '/auth/callback');
+            // Clear OAuth origin after successful auth
+            sessionStorage.removeItem('oauth-origin');
+            sessionStorage.removeItem('oauth-path');
+            sessionStorage.removeItem('oauth-redirect-url');
+            localStorage.removeItem('oauth-origin');
+            localStorage.removeItem('oauth-redirect-url');
+            clearTimeout(timeoutId);
+            window.location.href = dashboardUrl;
+            return;
+          } catch (err) {
+            console.error('setSession failed:', err);
+            clearTimeout(timeoutId);
+            window.location.href = `/login?error=${encodeURIComponent(err.message || 'Session setup failed')}`;
+            return;
+          }
+        } else {
+          console.warn('⚠️ Missing tokens in hash');
+          clearTimeout(timeoutId);
+          window.location.href = '/login?error=missing_tokens';
           return;
         }
+      } else {
+        console.log('ℹ️ No access_token in hash, checking for code param...');
       }
 
       // 2) If using PKCE (code param), exchange code for a session
       const urlHasCode = window.location.search.includes('code=');
       if (urlHasCode) {
+        console.log('🔑 PKCE flow detected - exchanging code for session...');
         // Check if this might be a password reset (check for type=recovery in URL)
         const urlParams = new URLSearchParams(window.location.search);
         const type = urlParams.get('type');
         
         // If it's a recovery type, redirect to reset-password after exchange
         if (type === 'recovery') {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (error) {
-            console.error('Auth callback (PKCE recovery) error:', error);
-            window.location.href = '/reset-password?error=invalid_token';
-            return;
-          } else if (data?.session) {
-            // For password reset, redirect to reset-password page
-            // The reset-password page will handle the session
-            window.location.href = '/reset-password';
+          try {
+            const { data, error } = await Promise.race([
+              supabase.auth.exchangeCodeForSession(window.location.href),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+            ]);
+            if (error) {
+              console.error('Auth callback (PKCE recovery) error:', error);
+              clearTimeout(timeoutId);
+              window.location.href = '/reset-password?error=invalid_token';
+              return;
+            } else if (data?.session) {
+              // For password reset, redirect to reset-password page
+              // The reset-password page will handle the session
+              clearTimeout(timeoutId);
+              window.location.href = '/reset-password';
+              return;
+            }
+          } catch (err) {
+            console.error('PKCE recovery exchange failed:', err);
+            clearTimeout(timeoutId);
+            window.location.href = '/reset-password?error=timeout';
             return;
           }
         } else {
           // Regular OAuth flow
-          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (error) {
-            console.error('Auth callback (PKCE) error:', error);
-          } else if (data?.session) {
+          console.log('🔄 Exchanging OAuth code for session...');
+          console.log('📍 Full callback URL:', window.location.href);
+          console.log('📍 Code parameter present:', window.location.search.includes('code='));
+          
+          // Check if PKCE state exists in storage
+          const pkceState = localStorage.getItem('sb-auth-token') || localStorage.getItem('supabase.auth.token');
+          console.log('🔑 PKCE state check:', {
+            hasStorage: !!pkceState,
+            storageKeys: Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('sb-'))
+          });
+          
+          try {
+            // Use the full URL for exchange - Supabase will extract code and verifier
+            const exchangeUrl = window.location.href;
+            console.log('🔄 Calling exchangeCodeForSession with URL:', exchangeUrl);
+            
+            const { data, error } = await Promise.race([
+              supabase.auth.exchangeCodeForSession(exchangeUrl),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+            ]);
+            if (error) {
+              console.error('Auth callback (PKCE) error:', error);
+              console.error('Error details:', {
+                message: error.message,
+                status: error.status,
+                name: error.name
+              });
+              
+              // Check if it's a PKCE code verifier error
+              if (error.message?.includes('code verifier') || 
+                  error.message?.includes('code_verifier') ||
+                  error.message?.includes('both auth code and code verifier')) {
+                console.error('❌ PKCE code verifier missing! This usually means:');
+                console.error('1. The OAuth flow was started on a different origin');
+                console.error('2. localStorage was cleared between OAuth start and callback');
+                console.error('3. Different Supabase client instances are being used');
+                
+                // Try to recover by checking if we can get the code from URL and manually handle it
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                
+                if (code) {
+                  console.log('⚠️ Attempting to recover PKCE state...');
+                  // Check localStorage for any Supabase auth state
+                  const allKeys = Object.keys(localStorage);
+                  const supabaseKeys = allKeys.filter(k => k.includes('supabase') || k.includes('sb-'));
+                  console.log('🔑 Supabase keys in localStorage:', supabaseKeys);
+                  
+                  // If no PKCE state found, redirect to login with helpful message
+                  if (supabaseKeys.length === 0) {
+                    clearTimeout(timeoutId);
+                    const errorMsg = 'PKCE authentication state was lost. This can happen if you were redirected between different projects. Please try signing in again.';
+                    window.location.href = `/login?error=${encodeURIComponent(errorMsg)}&type=pkce`;
+                    return;
+                  }
+                }
+              }
+              
+              clearTimeout(timeoutId);
+              
+              // Check if it's a network/Supabase connection error
+              if (error.message?.includes('Failed to fetch') || 
+                  error.message?.includes('ERR_NAME_NOT_RESOLVED') ||
+                  error.message?.includes('NetworkError')) {
+                const errorMsg = 'Cannot connect to authentication server. The Supabase project may be inactive or the URL is incorrect.';
+                window.location.href = `/login?error=${encodeURIComponent(errorMsg)}&type=connection`;
+              } else {
+                // Show error and redirect
+                window.location.href = `/login?error=${encodeURIComponent(error.message)}`;
+              }
+              return;
+            } else if (data?.session) {
+              console.log('✅ Session obtained successfully');
+              clearTimeout(timeoutId);
             // Persist to sessionStorage so Header.astro/UI picks up Google email
             sessionStorage.setItem('simple-auth-session', JSON.stringify({
               user: data.session.user,
@@ -174,19 +496,60 @@ try {
             window.dispatchEvent(new CustomEvent('user-logged-in', { detail: data.session.user }));
 
             // Clean URL (remove query) and redirect
+            // Use absolute URL to ensure we stay on the same origin
+            // Double-check we're on the correct origin before redirecting
+            const storedOrigin = sessionStorage.getItem('oauth-origin') || localStorage.getItem('oauth-origin');
+            const finalOrigin = storedOrigin && storedOrigin !== window.location.origin ? storedOrigin : window.location.origin;
+            const dashboardUrl = `${finalOrigin}/dashboard`;
+            console.log('✅ OAuth success (PKCE), redirecting to:', dashboardUrl, {
+              storedOrigin: storedOrigin,
+              currentOrigin: window.location.origin,
+              finalOrigin: finalOrigin
+            });
             window.history.replaceState({}, document.title, '/auth/callback');
-            window.location.href = '/dashboard';
+            // Clear OAuth origin after successful auth
+            sessionStorage.removeItem('oauth-origin');
+            sessionStorage.removeItem('oauth-path');
+            sessionStorage.removeItem('oauth-redirect-url');
+            localStorage.removeItem('oauth-origin');
+            localStorage.removeItem('oauth-redirect-url');
+            window.location.href = dashboardUrl;
+            return;
+            }
+          } catch (err) {
+            console.error('PKCE exchange failed:', err);
+            clearTimeout(timeoutId);
+            
+            // Check if it's a network/Supabase connection error
+            if (err.message?.includes('Failed to fetch') || 
+                err.message?.includes('ERR_NAME_NOT_RESOLVED') ||
+                err.message?.includes('NetworkError') ||
+                err.message === 'Timeout') {
+              const errorMsg = err.message === 'Timeout' 
+                ? 'Authentication timeout - The server took too long to respond. Please check your Supabase configuration.'
+                : 'Cannot connect to authentication server. The Supabase project may be inactive or the URL is incorrect.';
+              window.location.href = `/login?error=${encodeURIComponent(errorMsg)}&type=connection`;
+            } else {
+              window.location.href = `/login?error=${encodeURIComponent(err.message || 'Authentication timeout')}`;
+            }
             return;
           }
         }
       }
 
       // 3) Fallback: attempt to read current session
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Auth callback error:', error);
-        return;
-      }
+      console.log('🔄 Fallback: Attempting to get existing session...');
+      try {
+        const { data, error } = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]);
+        if (error) {
+          console.error('Auth callback error:', error);
+          clearTimeout(timeoutId);
+          window.location.href = `/login?error=${encodeURIComponent(error.message)}`;
+          return;
+        }
 
       if (data.session?.user) {
         // Persist Google session too
@@ -197,13 +560,42 @@ try {
         }));
         window.dispatchEvent(new CustomEvent('user-logged-in', { detail: data.session.user }));
 
-        // Redirect to dashboard
+        // Redirect to dashboard - use absolute URL
+        // Double-check we're on the correct origin before redirecting
+        const storedOrigin = sessionStorage.getItem('oauth-origin') || localStorage.getItem('oauth-origin');
+        const finalOrigin = storedOrigin && storedOrigin !== window.location.origin ? storedOrigin : window.location.origin;
+        const dashboardUrl = `${finalOrigin}/dashboard`;
+        console.log('✅ OAuth success (fallback), redirecting to:', dashboardUrl, {
+          storedOrigin: storedOrigin,
+          currentOrigin: window.location.origin,
+          finalOrigin: finalOrigin
+        });
+        // Clear OAuth origin after successful auth
+        sessionStorage.removeItem('oauth-origin');
+        sessionStorage.removeItem('oauth-path');
+        sessionStorage.removeItem('oauth-redirect-url');
+        localStorage.removeItem('oauth-origin');
+        localStorage.removeItem('oauth-redirect-url');
+        clearTimeout(timeoutId);
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = dashboardUrl;
         }, 1000);
+      } else {
+        // No session found - redirect to login
+        console.warn('⚠️ No session found in fallback');
+        clearTimeout(timeoutId);
+        window.location.href = '/login?error=no_session';
+      }
+      } catch (err) {
+        console.error('Fallback session check failed:', err);
+        clearTimeout(timeoutId);
+        window.location.href = `/login?error=${encodeURIComponent(err.message || 'Session check failed')}`;
+        return;
       }
     } catch (err) {
       console.error('Callback error:', err);
+      clearTimeout(timeoutId);
+      window.location.href = `/login?error=${encodeURIComponent(err.message || 'Authentication failed')}`;
     }
   }
 
@@ -215,9 +607,24 @@ try {
     if (event === 'SIGNED_IN' && session?.user) {
       console.log('User signed in:', session.user);
       
-      // Redirect to dashboard
+      // Redirect to dashboard - use absolute URL
+      // Double-check we're on the correct origin before redirecting
+      const storedOrigin = sessionStorage.getItem('oauth-origin') || localStorage.getItem('oauth-origin');
+      const finalOrigin = storedOrigin && storedOrigin !== window.location.origin ? storedOrigin : window.location.origin;
+      const dashboardUrl = `${finalOrigin}/dashboard`;
+      console.log('✅ Auth state changed, redirecting to:', dashboardUrl, {
+        storedOrigin: storedOrigin,
+        currentOrigin: window.location.origin,
+        finalOrigin: finalOrigin
+      });
+      // Clear OAuth origin after successful auth
+      sessionStorage.removeItem('oauth-origin');
+      sessionStorage.removeItem('oauth-path');
+      sessionStorage.removeItem('oauth-redirect-url');
+      localStorage.removeItem('oauth-origin');
+      localStorage.removeItem('oauth-redirect-url');
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        window.location.href = dashboardUrl;
       }, 1000);
     }
   });
