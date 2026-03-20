@@ -32,12 +32,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce'
   },
   global: {
-    fetch: (url, options = {}) => {
+    // IMPORTANT: Preserve Supabase headers (apikey/Authorization).
+    // `options.headers` may be a Headers instance; spreading it drops values.
+    fetch: (url, options: RequestInit = {}) => {
+      const mergedHeaders = new Headers(options.headers || {});
+
+      // Safety net: ensure apikey header is present (some environments lose it)
+      if (!mergedHeaders.has('apikey') && supabaseAnonKey) {
+        mergedHeaders.set('apikey', supabaseAnonKey);
+      }
+
       return fetch(url, {
         ...options,
-        headers: {
-          ...options.headers,
-        },
+        headers: mergedHeaders,
       });
     },
   },
@@ -614,19 +621,71 @@ export const signOut = async () => {
   return await supabaseAuth.signOut();
 };
 
+// Reduce console noise when Supabase schema/RLS isn't configured.
+// The app intentionally falls back to mock products/plans in those cases.
+const __supabaseWarnOnce = {
+  productsSchema: false,
+  productsPermission: false,
+  productPlansSchema: false,
+  productPlansPermission: false,
+};
+
 export const getProducts = async () => {
   try {
-    const { data, error } = await supabase
+    const missingColumn = (err: any) =>
+      err?.code === '42703' || /does not exist/i.test(err?.message || '');
+    const permissionDenied = (err: any) =>
+      err?.code === '42501' || /permission denied/i.test(err?.message || '');
+
+    // Preferred query (supports sorting)
+    const preferred = await supabase
       .from('products')
       .select('*')
       .eq('is_active', true)
       .order('sort_order');
 
-    if (error) {
-      console.error('Error fetching products:', error);
+    if (!preferred.error) {
+      return (preferred.data || []) as Product[];
+    }
+
+    // If DB schema doesn't have `sort_order`, retry without ordering (keeps app working)
+    if (missingColumn(preferred.error)) {
+      if (!__supabaseWarnOnce.productsSchema) {
+        console.warn('Supabase products schema missing expected columns; retrying without sort_order');
+        __supabaseWarnOnce.productsSchema = true;
+      }
+      const fallback = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true);
+
+      if (!fallback.error) {
+        return (fallback.data || []) as Product[];
+      }
+
+      if (permissionDenied(fallback.error)) {
+        if (!__supabaseWarnOnce.productsPermission) {
+          console.warn('Supabase products table not accessible (RLS/permissions); using fallback products');
+          __supabaseWarnOnce.productsPermission = true;
+        }
+        return [];
+      }
+
+      // Only log unexpected errors loudly
+      console.error('Error fetching products:', fallback.error);
       return [];
     }
-    return data as Product[];
+
+    if (permissionDenied(preferred.error)) {
+      if (!__supabaseWarnOnce.productsPermission) {
+        console.warn('Supabase products table not accessible (RLS/permissions); using fallback products');
+        __supabaseWarnOnce.productsPermission = true;
+      }
+      return [];
+    }
+
+    console.error('Error fetching products:', preferred.error);
+    return [];
   } catch (error) {
     console.error('Error in getProducts:', error);
     return [];
@@ -784,17 +843,41 @@ export const getUserProfile = async (userId: string) => {
  */
 export const getProductPlans = async (productId: string) => {
   try {
-    const { data, error } = await supabase
+    const missingColumn = (err: any) =>
+      err?.code === '42703' || /does not exist/i.test(err?.message || '');
+    const permissionDenied = (err: any) =>
+      err?.code === '42501' || /permission denied/i.test(err?.message || '');
+
+    const preferred = await supabase
       .from('product_plans')
       .select('*')
       .eq('product_id', productId)
       .order('sort_order');
 
-    if (error) {
-      console.error('Error fetching product plans:', error);
+    if (!preferred.error) {
+      return preferred.data || [];
+    }
+
+    // If schema doesn't match (no product_id / sort_order), don't spam console.
+    // The app already has a fallback plans list in `products-data.ts`.
+    if (missingColumn(preferred.error)) {
+      if (!__supabaseWarnOnce.productPlansSchema) {
+        console.warn('Supabase product_plans schema missing expected columns; using fallback plans');
+        __supabaseWarnOnce.productPlansSchema = true;
+      }
       return [];
     }
-    return data || [];
+
+    if (permissionDenied(preferred.error)) {
+      if (!__supabaseWarnOnce.productPlansPermission) {
+        console.warn('Supabase product_plans table not accessible (RLS/permissions); using fallback plans');
+        __supabaseWarnOnce.productPlansPermission = true;
+      }
+      return [];
+    }
+
+    console.error('Error fetching product plans:', preferred.error);
+    return [];
   } catch (error) {
     console.error('Error in getProductPlans:', error);
     return [];

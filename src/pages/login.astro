@@ -510,10 +510,11 @@ import Layout from '../layouts/Layout.astro';
             successMessage.classList.remove('hidden');
           }
           
-          // Store session in sessionStorage for fallback
+          // Store session in sessionStorage for fallback (include refresh_token for Supabase session restore)
           sessionStorage.setItem('simple-auth-session', JSON.stringify({
             user: data.user,
             access_token: data.session?.access_token,
+            refresh_token: data.session?.refresh_token,
             timestamp: Date.now()
           }));
           
@@ -535,6 +536,7 @@ import Layout from '../layouts/Layout.astro';
           const initialSessionData = {
             user: userData,
             access_token: data.session?.access_token || 'simple-token-' + Date.now(),
+            refresh_token: data.session?.refresh_token || null,
             timestamp: Date.now()
           };
           
@@ -669,6 +671,7 @@ import Layout from '../layouts/Layout.astro';
               const updatedSessionData = {
                 user: userData,
                 access_token: data.session?.access_token || 'simple-token-' + Date.now(),
+                refresh_token: data.session?.refresh_token || null,
                 timestamp: Date.now()
               };
               
@@ -695,6 +698,7 @@ import Layout from '../layouts/Layout.astro';
               const finalSessionData = {
                 user: userData,
                 access_token: data.session?.access_token || 'simple-token-' + Date.now(),
+                refresh_token: data.session?.refresh_token || null,
                 timestamp: Date.now()
               };
               sessionStorage.setItem('simple-auth-session', JSON.stringify(finalSessionData));
@@ -718,6 +722,7 @@ import Layout from '../layouts/Layout.astro';
             const fallbackSessionData = {
               user: userData,
               access_token: data.session?.access_token || 'simple-token-' + Date.now(),
+              refresh_token: data.session?.refresh_token || null,
               timestamp: Date.now()
             };
             sessionStorage.setItem('simple-auth-session', JSON.stringify(fallbackSessionData));

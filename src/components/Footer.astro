@@ -152,8 +152,28 @@
           const isOrderMenuSystem = productSlug === 'order-menu-system';
           
           if (isOrderMenuSystem) {
-            // Order Menu System - redirect to product page
-            window.location.href = `/products/${productSlug}`;
+            // Order Menu System behavior:
+            // - If user is logged in -> redirect to /products/order-menu-system
+            // - If user is NOT logged in -> redirect to /products
+            const authManager = window.globalAuthManager || window.simpleAuthManager;
+            let isLoggedIn = !!(authManager && typeof authManager.isUserLoggedIn === 'function' && authManager.isUserLoggedIn());
+
+            // Storage fallback for timing differences
+            if (!isLoggedIn) {
+              try {
+                const sessionRaw = sessionStorage.getItem('simple-auth-session') || '';
+                const parsed = sessionRaw ? JSON.parse(sessionRaw) : null;
+                isLoggedIn = !!(parsed && parsed.user && (parsed.access_token || parsed.user.email));
+              } catch {
+                isLoggedIn = false;
+              }
+            }
+
+            if (isLoggedIn) {
+              window.location.href = `/products/${productSlug}`;
+            } else {
+              window.location.href = `/products`;
+            }
             return;
           }
           

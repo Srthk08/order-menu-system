@@ -283,7 +283,7 @@ import AuthGuard from '../components/AuthGuard.astro';
 
 <script>
   // Import Supabase client (handles auth + API key headers)
-  import { supabase } from '../lib/supabase';
+  import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 
   // Using global authentication manager and Supabase for permanent updates
 
@@ -674,6 +674,16 @@ import AuthGuard from '../components/AuthGuard.astro';
     let updateBtn = document.getElementById('update-btn') as HTMLButtonElement | null;
     const originalButtonText = updateBtn ? updateBtn.innerHTML : 'Update Profile';
 
+    // Safety: always reset button after 60s so user is never stuck on "Updating..."
+    const safetyReset = setTimeout(() => {
+      const btn = document.getElementById('update-btn') as HTMLButtonElement | null;
+      if (btn && btn.disabled) {
+        btn.disabled = false;
+        btn.textContent = 'Update Profile';
+        showError('Update took too long. Please try again.');
+      }
+    }, 60000);
+
     try {
       // Show loading state immediately (inside try so any DOM issues are caught)
       if (updateBtn) {
@@ -771,34 +781,126 @@ import AuthGuard from '../components/AuthGuard.astro';
       // Format phone number with country code
       const formattedPhone = phone && phone.trim() ? `${countryCode}${phone.replace(/\D/g, '')}` : null;
 
-      // Prepare update data
+      // Only fields we can safely update (omit updated_at – DB trigger may set it)
       const updateData = {
         full_name: fullName.trim(),
         phone: formattedPhone,
         company_name: companyName.trim() || null,
-        updated_at: new Date().toISOString()
       };
 
-      // 1) Update Supabase profiles table (single awaited call – source of truth)
-      console.log('💾 Sending profile update to Supabase profiles table...', updateData);
-      const { error: dbError } = await withTimeout(
-        supabase
-          .from('profiles')
-          .update(updateData)
-          .eq('id', currentUser.id),
-        'profiles update'
-      ) as any;
-
-      if (dbError) {
-        console.error('Supabase update error:', dbError);
-        throw new Error(dbError.message || 'Database update failed');
+      // Resolve access token safely (prefer current Supabase session; fallback to stored tokens)
+      let accessToken: string | null = null;
+      try {
+        const { data: { session } } = await withTimeout(
+          supabase.auth.getSession(),
+          'supabase.auth.getSession',
+          8000
+        ) as any;
+        const token = session?.access_token;
+        if (typeof token === 'string' && token.startsWith('eyJ')) {
+          accessToken = token;
+        }
+      } catch (e) {
+        // ignore and fallback to storage
       }
 
-      console.log('✅ Profiles table updated, updating auth metadata...');
+      if (!accessToken) {
+        const authSessionRaw =
+          sessionStorage.getItem('simple-auth-session') || localStorage.getItem('simple-auth-session');
+        const authSession = authSessionRaw ? JSON.parse(authSessionRaw) : null;
+        const token = authSession?.access_token;
+        if (typeof token === 'string' && token.startsWith('eyJ')) {
+          accessToken = token;
+        }
+      }
 
-      // 1b) Also update Supabase auth user metadata so all sessions/pages see fresh data
+      if (!accessToken) {
+        showError('Session expired. Please login again.');
+        return;
+      }
+
+      // Helper: update local state so UI and button always reflect the new profile (keeps tokens)
+      const applyLocalProfileUpdate = () => {
+        try {
+          const sessionData = sessionStorage.getItem('simple-auth-session') || localStorage.getItem('simple-auth-session');
+          if (sessionData) {
+            const session = JSON.parse(sessionData);
+            if (session.user) {
+              session.user.full_name = fullName.trim();
+              session.user.phone = formattedPhone || undefined;
+              session.user.company_name = companyName.trim() || undefined;
+              const sessionStr = JSON.stringify(session);
+              sessionStorage.setItem('simple-auth-session', sessionStr);
+              localStorage.setItem('simple-auth-session', sessionStr);
+            }
+          }
+          const userData = {
+            ...currentUser,
+            full_name: fullName.trim(),
+            phone: formattedPhone || undefined,
+            company_name: companyName.trim() || undefined
+          };
+          localStorage.setItem('simple-auth-user', JSON.stringify(userData));
+          if (authManager) {
+            if (authManager.currentUser) {
+              authManager.currentUser.full_name = fullName.trim();
+              authManager.currentUser.phone = formattedPhone || undefined;
+              authManager.currentUser.company_name = companyName.trim() || undefined;
+            }
+            if (typeof authManager.handleLogin === 'function') {
+              authManager.handleLogin(userData);
+            }
+          }
+          window.dispatchEvent(new CustomEvent('auth-state-changed'));
+        } catch (e) {
+          console.warn('Local profile update warning:', e);
+        }
+      };
+
+      // 1) Update Supabase profiles table with timeout so we never hang forever
+      console.log('💾 Sending profile update to Supabase profiles table...', updateData);
+
       try {
-        await withTimeout(
+        const updateUrl = `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(currentUser.id)}`;
+        const updateRequest = fetch(updateUrl, {
+          method: 'PATCH',
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation'
+          },
+          body: JSON.stringify(updateData)
+        });
+
+        // Do not Promise-race a timeout here; a late response can still apply the update.
+        // The global safetyReset guarantees the button won't stay stuck.
+        const response = await updateRequest;
+        const responseText = await response.text();
+        if (!response.ok) {
+          let serverMessage = 'Could not update profile in server. Please try again.';
+          try {
+            const parsed = JSON.parse(responseText);
+            serverMessage = parsed?.message || parsed?.error_description || parsed?.error || serverMessage;
+          } catch {
+            // Keep fallback message if response is not JSON
+          }
+          throw new Error(serverMessage);
+        }
+
+        console.log('✅ Profiles table updated');
+      } catch (dbErr: any) {
+        const isTimeout = /timed out/i.test(dbErr?.message || '');
+        const msg = isTimeout
+          ? 'Server took too long to update profile. Please try again.'
+          : (dbErr?.message || 'Could not update profile in server. Please try again.');
+        showError(msg);
+        return;
+      }
+
+      // 1b) Update Supabase auth user metadata (best-effort, don't block)
+      try {
+        await Promise.race([
           supabase.auth.updateUser({
             data: {
               full_name: fullName.trim(),
@@ -806,75 +908,50 @@ import AuthGuard from '../components/AuthGuard.astro';
               company_name: companyName.trim() || null,
             }
           }),
-          'supabase.auth.updateUser'
-        );
+          new Promise((_, rej) => setTimeout(() => rej(new Error('auth update timeout')), 10000))
+        ]);
         console.log('✅ Supabase auth user metadata updated');
       } catch (authMetaError) {
-        console.warn('⚠️ Failed to update auth user metadata (non-critical):', authMetaError);
+        console.warn('⚠️ Auth metadata update skipped (non-critical):', authMetaError);
       }
 
-      // 2) Update session/local storage for instant feedback AFTER DB success
+      // 2) Update local state after successful DB update
+      applyLocalProfileUpdate();
+
+      // 2b) Persist latest Supabase session so the next profile update still has valid tokens
       try {
-        const sessionData = sessionStorage.getItem('simple-auth-session');
-        if (sessionData) {
-          const session = JSON.parse(sessionData);
-          if (session.user) {
-            session.user.full_name = fullName.trim();
-            session.user.phone = formattedPhone || undefined;
-            session.user.company_name = companyName.trim() || undefined;
+        const { data: { session: latestSession } } = await withTimeout(
+          supabase.auth.getSession(),
+          'supabase.auth.getSession (persist)',
+          8000
+        ) as any;
+        if (latestSession?.access_token) {
+          const sessionData = sessionStorage.getItem('simple-auth-session');
+          const localData = localStorage.getItem('simple-auth-session');
+          const session = sessionData ? JSON.parse(sessionData) : (localData ? JSON.parse(localData) : {});
+          if (session && session.user) {
+            session.access_token = latestSession.access_token;
+            session.refresh_token = latestSession.refresh_token || session.refresh_token;
+            session.timestamp = Date.now();
             sessionStorage.setItem('simple-auth-session', JSON.stringify(session));
-            console.log('✅ Profile updated in sessionStorage');
+            localStorage.setItem('simple-auth-session', JSON.stringify(session));
           }
         }
-        
-        const userData = {
-          ...currentUser,
-          full_name: fullName.trim(),
-          phone: formattedPhone || undefined,
-          company_name: companyName.trim() || undefined
-        };
-        localStorage.setItem('simple-auth-user', JSON.stringify(userData));
-        console.log('✅ Profile updated in localStorage');
-      } catch (localError) {
-        console.warn('⚠️ Session/local storage update warning (non-critical):', localError);
+      } catch (e) {
+        console.warn('Could not persist Supabase session:', e);
       }
 
-      // 3) Update auth manager local state so header/dashboard etc. see new data
-      if (authManager) {
-        if (authManager.currentUser) {
-          authManager.currentUser.full_name = fullName.trim();
-          authManager.currentUser.phone = formattedPhone || undefined;
-          authManager.currentUser.company_name = companyName.trim() || undefined;
-        }
-        if (typeof authManager.handleLogin === 'function') {
-          const updatedUser = {
-            ...currentUser,
-            full_name: fullName.trim(),
-            phone: formattedPhone || undefined,
-            company_name: companyName.trim() || undefined
-          };
-          authManager.handleLogin(updatedUser);
-        }
-      }
-
-      // 4) Show success (DB and local both updated)
+      // 3) Success
       showSuccess('Profile updated successfully!');
-      
-      // Hide any previous error messages
       const errorMessage = document.getElementById('error-message');
-      if (errorMessage) {
-        errorMessage.classList.add('hidden');
-      }
-
-      // Dispatch auth state change event so other components refresh user info
-      window.dispatchEvent(new CustomEvent('auth-state-changed'));
+      if (errorMessage) errorMessage.classList.add('hidden');
       console.log('✅ Profile update flow completed');
 
     } catch (error: any) {
       console.error('Profile update error:', error);
       showError(error.message || 'Failed to update profile. Please try again.');
     } finally {
-      // Always reset button state, no matter what happened above
+      clearTimeout(safetyReset);
       updateBtn = document.getElementById('update-btn') as HTMLButtonElement | null;
       if (updateBtn) {
         updateBtn.disabled = false;

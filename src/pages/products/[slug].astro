@@ -276,21 +276,13 @@ const style = categoryStyles[product.category];
             return;
           }
           
-          // SPECIAL HANDLING FOR ORDER MENU SYSTEM: If we have session data, trust it
-          // This prevents redirect loops in production where auth manager might load slower
-          if (isOrderMenuSystem && hasValidSession && effectiveSession) {
-            // Try to parse session to verify it's valid
-            const session = effectiveSession;
-            // Valid session data exists - allow access for OMS even if auth manager not ready
-            console.log('✅ Order Menu System - valid session found, allowing access');
-            if (document.body) {
-              document.body.style.transition = 'opacity 0.3s ease-in';
-              document.body.style.opacity = '1';
-            }
-            if (document.documentElement) {
-              document.documentElement.style.transition = 'opacity 0.3s ease-in';
-              document.documentElement.style.opacity = '1';
-            }
+          // SPECIAL HANDLING FOR ORDER MENU SYSTEM:
+          // Do NOT trust storage-only sessions as "logged in".
+          // This prevents unauthenticated users from entering the project flow.
+          if (isOrderMenuSystem && authManager && authManager.isUserLoggedIn()) {
+            console.log('✅ Order Menu System - auth manager logged in, allowing access');
+            if (document.body) document.body.style.opacity = '1';
+            if (document.documentElement) document.documentElement.style.opacity = '1';
             return;
           }
           
@@ -339,11 +331,21 @@ const style = categoryStyles[product.category];
             return;
           }
           
-          // Consider user logged in if EITHER auth manager says so OR we have a valid session
-          const isLoggedIn = (authManager && authManager.isUserLoggedIn()) || hasValidSession;
+          // For Order Menu System: consider user logged in ONLY if auth manager says so.
+          // For other products: keep existing "storage fallback" to avoid deployment timing issues.
+          const isLoggedIn = isOrderMenuSystem
+            ? !!(authManager && authManager.isUserLoggedIn())
+            : (authManager && authManager.isUserLoggedIn()) || hasValidSession;
           
           if (!isLoggedIn) {
             // Redirect to login with smooth transition
+            // For OMS product page: DO NOT redirect the user to login just by clicking
+            // the public link. Keep them on the product page and show the login prompt UI.
+            if (isOrderMenuSystem) {
+              if (document.body) document.body.style.opacity = '1';
+              if (document.documentElement) document.documentElement.style.opacity = '1';
+              return;
+            }
             if (document.body) {
               document.body.style.transition = 'opacity 0.3s ease-out';
               document.body.style.opacity = '0';

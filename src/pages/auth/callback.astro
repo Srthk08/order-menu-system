@@ -149,33 +149,12 @@ try {
 </Layout>
 
 <script>
-  import { createClient } from '@supabase/supabase-js';
+  // CRITICAL: Use the same Supabase client as login.astro so PKCE flow state (code_verifier)
+  // is stored and read from the same localStorage key. Otherwise you get "invalid flow state".
+  import { supabase } from '../../lib/supabase';
 
   const SUPABASE_URL = 'https://lmrrdcaavwwletcjcpqv.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcnJkY2Fhdnd3bGV0Y2pjcHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MDQ0ODgsImV4cCI6MjA3MTA4MDQ4OH0.AU59Qfr6K9i880Gcn5y-3pjCf8PXsDIq4OI0-lPQVuQ';
-  
-  // Use the same Supabase client configuration as the rest of the app
-  // This ensures PKCE state is preserved
-  let supabase;
-  
-  // First, try to use the global Supabase client from Layout.astro (if available)
-  if (typeof window !== 'undefined' && window.supabase && window.supabase.auth) {
-    console.log('✅ Using global Supabase client');
-    supabase = window.supabase;
-  } else {
-    // Create a new client with the same config
-    console.log('⚠️ Creating new Supabase client (global not available)');
-    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        flowType: 'pkce',
-        storage: window.localStorage, // Ensure we use localStorage for PKCE state
-        storageKey: 'sb-auth-token' // Standard Supabase storage key
-      }
-    });
-  }
 
   // Check Supabase connectivity first
   (async function checkSupabaseConnection() {
@@ -311,7 +290,9 @@ try {
       if (hash.includes('access_token')) {
         const params = new URLSearchParams(hash.replace('#', ''));
         const access_token = params.get('access_token');
-        const refresh_token = params.get('refresh_token') || params.get('provider_refresh_token');
+        // IMPORTANT: Supabase `setSession` requires Supabase refresh_token.
+        // `provider_refresh_token` (e.g. Google) is NOT a Supabase token and will break auth.
+        const refresh_token = params.get('refresh_token');
         const type = params.get('type');
 
         // Check if this is a password reset (recovery) flow
@@ -335,6 +316,7 @@ try {
             sessionStorage.setItem('simple-auth-session', JSON.stringify({
               user: data.session.user,
               access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
               timestamp: Date.now()
             }));
             // Notify app
@@ -491,6 +473,7 @@ try {
             sessionStorage.setItem('simple-auth-session', JSON.stringify({
               user: data.session.user,
               access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
               timestamp: Date.now()
             }));
             window.dispatchEvent(new CustomEvent('user-logged-in', { detail: data.session.user }));
